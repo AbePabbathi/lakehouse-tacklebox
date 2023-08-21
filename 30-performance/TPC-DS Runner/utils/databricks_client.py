@@ -160,6 +160,6 @@ class DatabricksClient:
                     "cluster_size": self.constants.warehouse_size,
                     "min_num_clusters": "1",
                     "max_num_clusters": self.constants.max_num_warehouse_clusters,
-                    "auto_stop_mins": "10",
+                    "auto_stop_mins": "720",
                 }
             )
