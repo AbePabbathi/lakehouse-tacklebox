@@ -1,27 +1,10 @@
 ## Contributing
 #### Backlog
 Required
-* Support query duplication. Currently, beaker does not expose the ability to repeatedly run the same query so we just rerun the benchmark. This makes each benchmark run blocking.
-  * Once merged, the loop logic will need to be changed also
-* Check if there is a warehouse continuation token - I didn't see it in the API docs
-* Change dist to reference main instead of nishant branch of beaker. We're waiting on PR merge for this
 * Finish the README
   * Quickstart
   * Education about concurrency testing
-  * Product notes/limitations
-
-Nice to have
-* Improve token authentication. Currently the user has to pass a PAT via a filter. This is not acceptable because the PAT is exposed via the job UI. Potential solutions include but are not limited to...
-  1. Add secrets API functionality (instructions for how to pass token, add secret scope/key widgets, pass values as job parameters, read accordingly)
-  2. Refactor beaker to support OAuth - [datbaricks-sql-connector example](https://github.com/databricks/databricks-sql-python/blob/b894605ba7fe2525f1cac830a330149b09b1d8c1/examples/interactive_oauth.py). Note that you'll have to migrate all `requests` API calls to the python SDK as well
-  * [Relevant slack thread](https://databricks.slack.com/archives/C0J7QJHUJ/p1691539325013799)
-* Support writing raw queries to UC volumes instead of DBFS
-* determine if spark-sql-perf supports latest LTS DBR version or if we need to hardcode 12.2
-* Make Beaker pip-installable within a Databricks notebook - [issue](https://github.com/goodwillpunning/beaker/issues/19)
-* Add dashboarding and further analysis using Nishant's tool(s)
-
-Needs Scoping
-* Leverage beaker warehouse creation instead of current method
+  * Add note about single use mode for auth for python SDK (the main notebook must leverage this)
 
 # Databricks TPC-DS Benchmarking Tool
 
@@ -29,29 +12,52 @@ This tool runs the TPC-DS benchmark on a Databricks SQL warehouse. The TPC-DS be
 
 ## Quick Start
 #### 1 - Open the main notebook
-TODO: screenshot
+<img src="./assets/images/main_notebook.png" width="200">
+
 #### 2 - Determine your parameters
-TODO: screenshot
-TODO: documentation of the params
+<img src="./assets/images/filters.png" width="200">
+
+Parameters
+* **Catalog Name**: the name of the catalog to write to for non-UC configurations
+* **Schema Prefix**: a string that will be prepended to the dynamically-generated schema name
+* **Number of GB of Data**: the number of gigabytes of TPC-DS data to be written. `1` indicates that the sum of all table sizes will be ~1GB. 
+* **Maximum Number of Clusters**: the maximum number of workers to which a SQL warehouse can scale
+* **Warehouse Size**: T-shirt size of the SQL warehouse workers
+* **Concurrency**: the simulated number of users executing the TPC-DS queries. On the backend, this corresponds to the number of Python threads.
+* **Query Repeatition Count**: the number of times the TPC-DS queries will be repeatedly run. `2` indicates that each TPC-DS query will be run twice. Note that caching is disabled, so repeated queries will not hit cache. 
+
 #### 3 - Click "Run All"
+<img src="./assets/images/run_all.png" width="200">
+
+#### What will happen?
+After clicking run all, a Databricks workflow with two tasks will be created. The first task is responsible for writing TPC-DS data and the associated queries into Delta tables. The second task will execute a TPC-DS benchmark leveraging the tables and queries created in the prior task. The results of the bechmarking will be printed out in the job notebook for viewing, but also will be written to a delta table; the location of the delta table will be printed in the job notebook. 
+
+<img src="./assets/images/workflow.png" width="200">
 
 ## Core Concepts
 - **Concurrency**: The simulated number of users executing concurrent queries. It provides an insight into how well the system can handle multiple users executing queries at the same time.
 - **Throughput**: The number of queries that the system can handle per unit of time. It is usually measured in queries per minute (QPM) and provides insignt into the speed and efficiency of the system.
-- **TODO**
 
+# Product Details
 ## Relevant Features
-* The tool is cloud agnostic
-* Authentication is automatically handled by the python SDK
-* Benchmarking will be performed on the latest LTS DBR version
-* Result cache enabled is hard-coded to false
+* The tool is cloud agnostic.
+* Authentication is automatically handled by the python SDK.
+* Benchmarking will be performed on the latest LTS DBR version.
+* Result cache is hard-coded to false, which means that all queries will not hit a warehouse's cache.
+* Each benchmark run will trigger a warehouse "warming," which is just a `SELECT *` on all TPC-DS tables. 
 * Table format is hard-coded to delta. Data writes are currently hard-coded to DBR 12.2, so if there are updates in Delta with newer DBR versions, they will not be included. This decision was made because spark-sql-perf did not run on > 12.2 DBR as of 2023-08-10.
 * A new warehouse will be created based on user parameters. If a warehouse with the same name exists, the benchmarking tool will use that existing warehouse.
 * Given Python's Global Processing Lock (GIL), increasing the number of cores will have diminshing returns. To hide complexity from the user while also bounding cost, the concurrency parameter will scale cluster count linearly up to 100 cores, then stop. Concurrency > 100 however is still supported via multithreading - it will just run on a maximum of 100 cores. Based on our default node type, this will be 25 workers.
 * We are using [Databricks python-sql-connector](https://docs.databricks.com/en/dev-tools/python-sql-connector.html) to execute queries, but we are not fetching the results. The python-sql-connector has a built-in feature that retries with backoff when rate limit errors occur. Due to this retry mechanism, the actual performance of the system may be slightly faster than what the benchmarking results indicate.
 
 ### Limitations
-* You must run this tool from a DBR version that supports default auth for the python sdk. This should be all LTS versions
+* You must run this tool from a single-user cluster to allow default SDK authentication. 
+* We currently don't support UC. That will be the next step for this tool.
+* We currently only support DBSQL serverless warehouses for simplicity. If there is desire to test non-serverless warehouses, please let us know.
 
-
-
+### Data Generation Runtimes
+Both the data generation and benchmarking workflow tasks will increase in runtime as the data size increases. Here are some examples, however your benchmarking runtimes may differ signifigantly depending on your configurations.
+| Number of GB Written | create_data_and_queries Runtime | TPCDS_benchmarking Runtime |
+|---------|---------|---------|
+| 1 GB | 17 mins | 7 mins |
+| 100 GB | 70 mins | 24 mins |

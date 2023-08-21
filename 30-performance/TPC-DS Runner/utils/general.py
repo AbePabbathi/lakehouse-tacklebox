@@ -1,7 +1,17 @@
 import requests
 from typing import List
+from databricks.sdk import WorkspaceClient
 
 ############### Utils #############
+def can_default_authenticate_sdk():
+    try:
+        _ = WorkspaceClient()
+    except Exception as e:
+        if 'cannot configure default credentials' in str(e):
+            raise Exception("""\nWe are using the Databricks Python SDK with default authentification. It requires that you run this notebook from a single-user cluster. Please modify the existing cluster or create a new cluster with an `Access Mode` of `Assigned`. Vist the below link for more:\n\thttps://docs.databricks.com/en/clusters/configure.html#what-is-cluster-access-mode\n""")
+        else:
+            raise
+
 def clean_path_for_native_python(path: str) -> str:
     return "/dbfs/" + path.lstrip("/").replace("dbfs", "").lstrip(":").lstrip("/")
 
@@ -68,7 +78,7 @@ def _add_init_script_to_dbfs(dbutils, init_script_path: str, jar_path: str) -> b
 def _add_beaker_whl_to_dbfs(dbutils, dbfs_path) -> bool:
     return add_remote_file_to_dbfs(
         dbutils=dbutils,
-        file_url="https://github.com/goodwillpunning/beaker/blob/nishant-20230507-1/dist/beaker-0.0.1-py2.py3-none-any.whl?raw=true",
+        file_url="https://github.com/goodwillpunning/beaker/raw/d1244a315bfee58ccf7bb303031657a11929b7aa/dist/beaker-0.0.1-py2.py3-none-any.whl",
         dbfs_path=dbfs_path,
     )
 

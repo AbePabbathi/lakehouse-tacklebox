@@ -44,7 +44,7 @@ class DatabricksClient:
 
     @property
     def warehouse_name(self):
-        return f"[AUTOMATED] TPCDS Benchmarking Warehouse - {self.constants.warehouse_size}, {self.constants.max_num_warehouse_clusters} Max Clusters"
+        return f"[AUTOMATED] {self.constants.current_user_name}'s TPCDS Benchmarking Warehouse - {self.constants.warehouse_size}, {self.constants.max_num_warehouse_clusters} Max Clusters"
 
     ########### Cluster Configurations ###########
     def _get_data_generator_cluster_config(self) -> Dict:

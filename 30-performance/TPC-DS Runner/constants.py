@@ -52,7 +52,7 @@ class Constants:
     )
 
     # Base directory where all data and queries will be written
-    root_directory = f"dbfs:/FileStore/TPCDS/{current_user_name}"
+    root_directory = f"dbfs:/Benchmarking/TPCDS/{current_user_name}"
 
     # Additional subdirectories within the above root_directory
     script_path = os.path.join(root_directory, "scripts")

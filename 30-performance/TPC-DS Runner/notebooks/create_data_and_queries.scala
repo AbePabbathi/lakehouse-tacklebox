@@ -48,7 +48,7 @@ tables.genData(
   clusterByPartitionColumns = false, // shuffle to get partitions coalesced into single files. 
   filterOutNullPartitionValues = false, // true to filter out the partition with NULL key value
   tableFilter = "", // "" means generate all tables
-  numPartitions = 4 // how many dsdgen partitions to run - number of input tasks.
+  numPartitions = 20 // how many dsdgen partitions to run - number of input tasks.
 ) 
 
 // Create the specified database if it doesn't exist

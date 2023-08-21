@@ -62,34 +62,15 @@ bm.setWarehouseToken(token=PAT)
 bm.setCatalog(catalog=CATALOG_NAME)
 bm.setSchema(schema=SCHEMA_NAME)
 bm.setQueryFileDir(QUERY_PATH)
+bm.setQueryRepeatCount(QUERY_REPETITION_COUNT)
 
-# Run the benchmark QUERY_REPTITION_COUNT number of times
-global_start_time = time.time()
-metrics = []
-durations = []
+# Execute run
+start_time = time.time()
+result = bm.execute()
+duration = time.time() - start_time
 
-for i in range(QUERY_REPETITION_COUNT):
-  # Execute run
-  start_time = time.time()
-  result = bm.execute()
-
-  # Store runtime
-  iteration_runtime = time.time() - start_time
-  durations.append(iteration_runtime)
-
-  # Store run metrics
-  metrics.append(
-    spark.createDataFrame(result)
-      .withColumn("iteration_index", F.lit(i))
-      .withColumn("iteration_runtime_seconds", F.lit(iteration_runtime))
-  )
-
-# Get runtime of entire process
-global_duration = time.time() - global_start_time
-
-# Create unioned data frame and add a global runtime column
-metrics_df = reduce(DataFrame.union, metrics)
-metrics_df = metrics_df.withColumn("global_runtime_seconds", F.lit(global_duration))
+# Store run metrics
+metrics_df = spark.createDataFrame(result)
 
 # COMMAND ----------
 

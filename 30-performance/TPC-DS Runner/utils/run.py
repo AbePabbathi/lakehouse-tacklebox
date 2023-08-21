@@ -1,11 +1,14 @@
-from utils.general import setup_files
+from utils.general import setup_files, can_default_authenticate_sdk
 from utils.databricks_client import DatabricksClient
 
 
 def run(spark, dbutils, constants):
-    # Step 0: drop write schema if exists
+    # Step 0.1: check if on a single use cluster
+    can_default_authenticate_sdk()
+
+    # Step 0.2: drop write schema if exists
     spark.sql(
-        f"drop schema if exists {constants.catalog_name}.{constants.schema_name} cascade"
+        f"create schema if not exists {constants.catalog_name}.{constants.schema_name}"
     )
 
     # Step 1: write init script, jar, and beaker whl to DBFS
