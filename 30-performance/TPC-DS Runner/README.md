@@ -1,11 +1,3 @@
-## Contributing
-#### Backlog
-Required
-* Finish the README
-  * Quickstart
-  * Education about concurrency testing
-  * Add note about single use mode for auth for python SDK (the main notebook must leverage this)
-
 # Databricks TPC-DS Benchmarking Tool
 
 This tool runs the TPC-DS benchmark on a Databricks SQL warehouse. The TPC-DS benchmark is a standardised method of evaluating the performance of decision support solutions, such as databases, data warehouses, and big data systems.
