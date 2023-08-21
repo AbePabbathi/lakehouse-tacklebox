@@ -11,6 +11,8 @@ Required
 This tool runs the TPC-DS benchmark on a Databricks SQL warehouse. The TPC-DS benchmark is a standardised method of evaluating the performance of decision support solutions, such as databases, data warehouses, and big data systems.
 
 ## Quick Start
+#### 0 - Clone this repo via [Databricks Repos](https://docs.databricks.com/en/repos/index.html)
+
 #### 1 - Open the main notebook
 <img src="./assets/images/main_notebook.png" width="600">
 
@@ -24,9 +26,13 @@ Parameters
 * **Maximum Number of Clusters**: the maximum number of workers to which a SQL warehouse can scale
 * **Warehouse Size**: T-shirt size of the SQL warehouse workers
 * **Concurrency**: the simulated number of users executing the TPC-DS queries. On the backend, this corresponds to the number of Python threads.
-* **Query Repeatition Count**: the number of times the TPC-DS queries will be repeatedly run. `2` indicates that each TPC-DS query will be run twice. Note that caching is disabled, so repeated queries will not hit cache. 
+* **Query Repeatition Count**: the number of times the TPC-DS queries will be repeatedly run. `2` indicates that each TPC-DS query will be run twice. Note that caching is disabled, so repeated queries will not hit cache.
 
-#### 3 - Click "Run All"
+#### 3 - Create or attach to a `Assigned Mode` Cluster
+<img src="./assets/images/assigned_mode_cluster.png" width="600">
+
+
+#### 4 - Click "Run All"
 <img src="./assets/images/run_all.png" width="600">
 
 #### What will happen?
