@@ -12,10 +12,10 @@ This tool runs the TPC-DS benchmark on a Databricks SQL warehouse. The TPC-DS be
 
 ## Quick Start
 #### 1 - Open the main notebook
-<img src="./assets/images/main_notebook.png" width="200">
+<img src="./assets/images/main_notebook.png" width="600">
 
 #### 2 - Determine your parameters
-<img src="./assets/images/filters.png" width="200">
+<img src="./assets/images/filters.png" width="600">
 
 Parameters
 * **Catalog Name**: the name of the catalog to write to for non-UC configurations
@@ -27,12 +27,12 @@ Parameters
 * **Query Repeatition Count**: the number of times the TPC-DS queries will be repeatedly run. `2` indicates that each TPC-DS query will be run twice. Note that caching is disabled, so repeated queries will not hit cache. 
 
 #### 3 - Click "Run All"
-<img src="./assets/images/run_all.png" width="200">
+<img src="./assets/images/run_all.png" width="600">
 
 #### What will happen?
 After clicking run all, a Databricks workflow with two tasks will be created. The first task is responsible for writing TPC-DS data and the associated queries into Delta tables. The second task will execute a TPC-DS benchmark leveraging the tables and queries created in the prior task. The results of the bechmarking will be printed out in the job notebook for viewing, but also will be written to a delta table; the location of the delta table will be printed in the job notebook. 
 
-<img src="./assets/images/workflow.png" width="200">
+<img src="./assets/images/workflow.png" width="600">
 
 ## Core Concepts
 - **Concurrency**: The simulated number of users executing concurrent queries. It provides an insight into how well the system can handle multiple users executing queries at the same time.
