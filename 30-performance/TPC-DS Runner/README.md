@@ -59,3 +59,4 @@ Both the data generation and benchmarking workflow tasks will increase in runtim
 |---------|---------|---------|
 | 1 GB | 17 mins | 7 mins |
 | 100 GB | 70 mins | 24 mins |
+| 1 TB | 305 hours | 54 mins |
