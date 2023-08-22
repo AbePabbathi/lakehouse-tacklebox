@@ -110,7 +110,7 @@ class DatabricksClient:
             "task_key": "TPCDS_benchmarking",
             "depends_on": [{"task_key": "create_data_and_queries"}],
             "notebook_task": {
-                "notebook_path": "/Repos/michael.berk@databricks.com/TPC-DS Runner/notebooks/run_tpcds_benchmarking",
+                "notebook_path": f"/Repos/{self.constants.current_user_email}/TPC-DS Runner/notebooks/run_tpcds_benchmarking",
                 "source": "WORKSPACE",
                 "base_parameters": {
                     "warehouse_id": self.constants.warehouse_id,
