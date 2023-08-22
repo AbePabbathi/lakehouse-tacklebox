@@ -13,7 +13,7 @@
 # MAGIC * Setup a list of schema names in Cmd 3
 # MAGIC * Gather table stats in using "describe detail" on each table in the database
 # MAGIC * Persist the metadata to delta tables in a database called 'data_profile'
-# MAGIC * Gather mount point locations
+# MAGIC * Gather mount point locations into a table
 # MAGIC * Create scripts to migrate tables
 # MAGIC
 # MAGIC
