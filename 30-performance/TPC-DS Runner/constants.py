@@ -58,7 +58,6 @@ class Constants:
     script_path = os.path.join(root_directory, "scripts")
     data_path = os.path.join(root_directory, "data")
     query_path = os.path.join(root_directory, "queries")
-    metric_path = os.path.join(root_directory, "metrics")
 
     # Location of the spark-sql-perf jar, which is used to create TPC-DS data and queries
     jar_path = os.path.join(script_path, "jars/spark-sql-perf_2.12-0.5.1-SNAPSHOT.jar")
@@ -91,3 +90,6 @@ class Constants:
         self.schema_name: str = (
             f"{self.schema_prefix.rstrip('_')}_{self.scale_factor}_gb"
         )
+
+        # Add schema to data path
+        self.data_path = os.path.join(self.data_path, self.schema_name)

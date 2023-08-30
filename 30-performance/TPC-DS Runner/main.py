@@ -1,4 +1,5 @@
 # Databricks notebook source
+# DBTITLE 1,Display Widgets
 dbutils.widgets.text("Catalog Name", "hive_metastore")
 dbutils.widgets.text("Schema Prefix", "tpcds")
 dbutils.widgets.dropdown("Number of GB of Data", "1", ["1", "10", "100", "500", "1000"])
@@ -9,6 +10,7 @@ dbutils.widgets.dropdown("Maximum Number of Clusters", "10", [str(x) for x in ra
 
 # COMMAND ----------
 
+# DBTITLE 1,Import Constants
 # MAGIC %run ./constants
 
 # COMMAND ----------
@@ -30,3 +32,7 @@ constants = Constants(
 from utils.run import run
 
 run(spark, dbutils, constants)
+
+# COMMAND ----------
+
+
