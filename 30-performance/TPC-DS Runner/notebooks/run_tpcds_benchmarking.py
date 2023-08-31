@@ -95,7 +95,7 @@ metrics_df.display()
 # DBTITLE 1,Throughput
 sql_files = [x for x in dbutils.fs.ls(QUERY_PATH.replace('/dbfs','dbfs:')) if x.name.endswith('.sql')]
 n_sql_queries = len(sql_files) * QUERY_REPETITION_COUNT
-print(f"TPC-DS queries per minute: {n_sql_files / (duration / 60)}")
+print(f"TPC-DS queries per minute: {n_sql_queries / (duration / 60)}")
 
 # COMMAND ----------
 
