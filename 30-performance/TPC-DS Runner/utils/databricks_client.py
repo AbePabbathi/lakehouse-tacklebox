@@ -103,6 +103,7 @@ class DatabricksClient:
                 "notebook_path": self.constants.create_data_and_queries_notebook_path,
                 "source": "WORKSPACE",
                 "base_parameters": {
+                    "tables_already_exist": self.constants.tables_already_exist,
                     "current_user_name": self.constants.current_user_name,
                     "scale_factor": self.constants.scale_factor,
                     "query_directory": self.constants.query_path,

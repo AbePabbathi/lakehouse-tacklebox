@@ -2,6 +2,33 @@ import requests
 from typing import List
 from databricks.sdk import WorkspaceClient
 
+_TPCDS_TABLE_NAMES = {
+  'call_center',
+  'catalog_page',
+  'catalog_returns',
+  'catalog_sales',
+  'customer',
+  'customer_address',
+  'customer_demographics',
+  'date_dim',
+  'household_demographics',
+  'income_band',
+  'inventory',
+  'item',
+  'promotion',
+  'reason',
+  'ship_mode',
+  'store',
+  'store_returns',
+  'store_sales',
+  'time_dim',
+  'warehouse',
+  'web_page',
+  'web_returns',
+  'web_sales',
+  'web_site'
+}
+
 ############### Utils #############
 def can_default_authenticate_sdk():
     try:
@@ -38,6 +65,15 @@ def add_remote_file_to_dbfs(dbutils, file_url: str, dbfs_path: str) -> bool:
 
     # Ensure write
     return directory_not_empty(dbutils, dbfs_path)
+  
+def tables_already_exist(spark, catalog: str, schema: str) -> bool:
+    tables = set(
+      spark.sql(f"show tables in {catalog}.{schema}")
+        .where("tableName not ILIKE 'benchmark%'")
+        .select('tableName')
+        .toPandas()['tableName']
+    )
+    return all(x in tables for x in _TPCDS_TABLE_NAMES)
 
 
 ################## DBFS Writes ####################

@@ -7,7 +7,6 @@ Contributions are welcome! Feel free to file an issue/PR or reach out to michael
   * Modify existing data write to handle conversion to UC-managed tables
 * Look to improve data write performance. Some options include:
   * Improve threading of writes.
-  * If the data (with a given set of configs) already exists, don't overwrite it.
   * Document baseline TPC-DS benchmarking runtimes - [template](https://github.com/databricks/spark-sql-perf/blob/master/src/main/notebooks/tpcds_datagen.scala)
 * Allow for running create data OR run benchmarking. Currently these methods are coupled and it prevent's rerunning different warehouse benchmarks against the same data source
 * Add dashboarding and further analysis using Nishant's tool(s)

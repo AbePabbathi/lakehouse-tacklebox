@@ -5,7 +5,7 @@ pip install databricks-sdk -q
 
 import os
 from dataclasses import dataclass
-
+from utils.general import tables_already_exist
 
 @dataclass
 class Constants:
@@ -93,3 +93,7 @@ class Constants:
 
         # Add schema to data path
         self.data_path = os.path.join(self.data_path, self.schema_name)
+
+        # Determine if TPC-DS tables already exist
+        self.tables_already_exist = tables_already_exist(spark, self.catalog_name, self.schema_name)
+
