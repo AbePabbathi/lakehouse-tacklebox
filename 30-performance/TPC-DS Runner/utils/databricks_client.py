@@ -3,7 +3,7 @@ import warnings
 from typing import Dict
 
 from databricks.sdk import WorkspaceClient
-from databricks.sdk.service import jobs, compute
+from databricks.sdk.service import jobs, compute, sql
 
 
 class DatabricksClient:
@@ -165,8 +165,13 @@ class DatabricksClient:
                 **{
                     "name": self.warehouse_name,
                     "cluster_size": self.constants.warehouse_size,
-                    "min_num_clusters": "1",
+                    "min_num_clusters": self.constants.max_num_warehouse_clusters,
                     "max_num_clusters": self.constants.max_num_warehouse_clusters,
-                    "auto_stop_mins": "10",
+                    "auto_stop_mins": "5",
+                    "warehouse_type": sql.WarehouseTypePairWarehouseType.PRO,
+                    "enable_serverless_compute": "true",
+                    "enable_photon": "true",
+                    "spot_instance_policy": sql.SpotInstancePolicy.RELIABILITY_OPTIMIZED,
+                    "channel": sql.Channel(name=sql.ChannelName.CHANNEL_NAME_PREVIEW),
                 }
             )

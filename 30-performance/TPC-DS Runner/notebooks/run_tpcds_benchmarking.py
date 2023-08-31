@@ -45,13 +45,9 @@ except AttributeError as e:
 # COMMAND ----------
 
 # DBTITLE 1,Start Warehouse
-print(time.time())
-
-w = WorkspaceClient()
-w.warehouses.start(WAREHOUSE_ID)
-w.wait_get_cluster_running(WAREHOUSE_ID)
-
-print(time.time())
+warehouse_start_time = time.time()
+WorkspaceClient().warehouses.start_and_wait(WAREHOUSE_ID)
+print(f"{int(time.time() - warehouse_start_time)}s Warehouse Startup Time")
 
 # COMMAND ----------
 
@@ -98,7 +94,7 @@ metrics_df.display()
 
 # DBTITLE 1,Throughput
 sql_files = [x for x in dbutils.fs.ls(QUERY_PATH.replace('/dbfs','dbfs:')) if x.name.endswith('.sql')]
-n_sql_files = len(sql_files)
+n_sql_queries = len(sql_files) * QUERY_REPETITION_COUNT
 print(f"TPC-DS queries per minute: {n_sql_files / (duration / 60)}")
 
 # COMMAND ----------

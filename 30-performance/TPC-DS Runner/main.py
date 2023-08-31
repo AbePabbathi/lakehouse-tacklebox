@@ -32,7 +32,3 @@ constants = Constants(
 from utils.run import run
 
 run(spark, dbutils, constants)
-
-# COMMAND ----------
-
-
