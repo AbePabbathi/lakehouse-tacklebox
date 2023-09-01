@@ -2,6 +2,7 @@
 Contributions are welcome! Feel free to file an issue/PR or reach out to michael.berk@databricks.com.
 
 ### Potential Contributions (in order of importance)
+* Scope warehouse concurrency limitations
 * Support UC
   * Support writing raw queries to UC volumes instead of DBFS
   * Modify existing data write to handle conversion to UC-managed tables

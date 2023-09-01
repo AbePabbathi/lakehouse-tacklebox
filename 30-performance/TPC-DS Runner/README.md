@@ -47,6 +47,7 @@ After clicking run all, a Databricks workflow with two tasks will be created. Th
 * A new warehouse will be created based on user parameters. If a warehouse with the same name exists, the benchmarking tool will use that existing warehouse.
 * Given Python's Global Processing Lock (GIL), increasing the number of cores will have diminshing returns. To hide complexity from the user while also bounding cost, the concurrency parameter will scale cluster count linearly up to 100 cores, then stop. Concurrency > 100 however is still supported via multithreading - it will just run on a maximum of 100 cores. Based on our default node type, this will be 25 workers.
 * We are using [Databricks python-sql-connector](https://docs.databricks.com/en/dev-tools/python-sql-connector.html) to execute queries, but we are not fetching the results. The python-sql-connector has a built-in feature that retries with backoff when rate limit errors occur. Due to this retry mechanism, the actual performance of the system may be slightly faster than what the benchmarking results indicate.
+* If the data (with a given set of configs) already exists, it will not be overwritten. The matching logic simply uses the name of the schema, so if you change the `schema_prefix` (and that resulting schema is not found), new data will be written.
 
 ### Limitations
 * You must run this tool from a single-user cluster to allow default SDK authentication. 
