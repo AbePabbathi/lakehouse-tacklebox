@@ -3,7 +3,7 @@ import warnings
 from typing import Dict
 
 from databricks.sdk import WorkspaceClient
-from databricks.sdk.service import jobs
+from databricks.sdk.service import jobs, compute, sql
 
 
 class DatabricksClient:
@@ -41,6 +41,16 @@ class DatabricksClient:
     @property
     def number_of_cores_per_worker(self) -> int:
         return 4
+    
+    @property
+    def base_cluster_config(self) -> Dict:
+        return {
+            "enable_local_disk_encryption": False,
+            "runtime_engine": "PHOTON",
+            "node_type_id": self.cloud_specific_cluster_type,
+            "single_user_name": f"{self.constants.current_user_email}",
+            "data_security_mode": "SINGLE_USER",
+        }
 
     @property
     def warehouse_name(self):
@@ -48,7 +58,7 @@ class DatabricksClient:
 
     ########### Cluster Configurations ###########
     def _get_data_generator_cluster_config(self) -> Dict:
-        return {
+        additional_configs = {
             "name": "TPCDS Benchmarking Cluster",
             # Specify autoscaling that can handle a variety of data sizes
             "autoscale": {"min_workers": 1, "max_workers": 10},
@@ -57,11 +67,10 @@ class DatabricksClient:
                 {"dbfs": {"destination": self.constants.init_script_path}}
             ],
             # Specify singe_user because scala requires a single user mode
-            "single_user_name": f"{self.constants.current_user_email}",
-            "data_security_mode": "SINGLE_USER",
-            "node_type_id": self.cloud_specific_cluster_type,
             "spark_version": "12.2.x-scala2.12",
         }
+
+        return self.base_cluster_config | additional_configs
 
     def _get_load_testing_cluster_config(self) -> Dict:
         concurrency = self.constants.concurrency
@@ -78,14 +87,13 @@ class DatabricksClient:
 
             n_workers = 25
 
-        return {
+        additional_configs = {
             "name": "TPCDS Load Testing Cluster",
             "num_workers": n_workers,
-            "spark_version": self.latest_spark_version,
-            "node_type_id": self.cloud_specific_cluster_type,
-            "single_user_name": f"{self.constants.current_user_email}",
-            "data_security_mode": "SINGLE_USER",
+            "spark_version": "12.2.x-scala2.12",#self.latest_spark_version,
         }
+
+        return self.base_cluster_config | additional_configs
 
     ################# Create Data Functions ###############
     def create_job(self):
@@ -95,6 +103,7 @@ class DatabricksClient:
                 "notebook_path": self.constants.create_data_and_queries_notebook_path,
                 "source": "WORKSPACE",
                 "base_parameters": {
+                    "tables_already_exist": self.constants.tables_already_exist,
                     "current_user_name": self.constants.current_user_name,
                     "scale_factor": self.constants.scale_factor,
                     "query_directory": self.constants.query_path,
@@ -110,7 +119,7 @@ class DatabricksClient:
             "task_key": "TPCDS_benchmarking",
             "depends_on": [{"task_key": "create_data_and_queries"}],
             "notebook_task": {
-                "notebook_path": f"/Repos/{self.constants.current_user_email}/TPC-DS Runner/notebooks/run_tpcds_benchmarking",
+                "notebook_path": self.constants.run_tpcds_benchmarking_notebook_path,
                 "source": "WORKSPACE",
                 "base_parameters": {
                     "warehouse_id": self.constants.warehouse_id,
@@ -127,6 +136,7 @@ class DatabricksClient:
 
         return self.w.jobs.create(
             name=self.constants.job_name,
+            run_as=jobs.JobRunAs(user_name=self.constants.current_user_email),
             tasks=[
                 jobs.Task.from_dict(step_1),
                 jobs.Task.from_dict(step_2),
@@ -138,8 +148,6 @@ class DatabricksClient:
 
     ############## Warehouse Creation Functions #################
     def get_warehouse_id_for_name(self, name: str) -> str:
-        # TODO handle continuation token
-        #  I don't think it's available in the API
         for w in self.w.warehouses.list():
             if w.name == name:
                 return w.id
@@ -158,8 +166,13 @@ class DatabricksClient:
                 **{
                     "name": self.warehouse_name,
                     "cluster_size": self.constants.warehouse_size,
-                    "min_num_clusters": "1",
+                    "min_num_clusters": self.constants.max_num_warehouse_clusters,
                     "max_num_clusters": self.constants.max_num_warehouse_clusters,
-                    "auto_stop_mins": "720",
+                    "auto_stop_mins": "5",
+                    "warehouse_type": sql.WarehouseTypePairWarehouseType.PRO,
+                    "enable_serverless_compute": "true",
+                    "enable_photon": "true",
+                    "spot_instance_policy": sql.SpotInstancePolicy.RELIABILITY_OPTIMIZED,
+                    "channel": sql.Channel(name=sql.ChannelName.CHANNEL_NAME_PREVIEW),
                 }
             )

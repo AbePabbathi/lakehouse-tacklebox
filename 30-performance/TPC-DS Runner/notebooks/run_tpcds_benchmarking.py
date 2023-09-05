@@ -16,8 +16,8 @@ HOST = spark.conf.get('spark.databricks.workspaceUrl')
 PAT = WorkspaceClient().tokens.create(comment='temp use', lifetime_seconds=60*30).token_value
 
 # ID of the warehouse to run benchmarks with
-_warehouse_id = dbutils.widgets.get("warehouse_id")
-WAREHOUSE_HTTP_PATH = f"/sql/1.0/warehouses/{_warehouse_id}"
+WAREHOUSE_ID = dbutils.widgets.get("warehouse_id")
+WAREHOUSE_HTTP_PATH = f"/sql/1.0/warehouses/{WAREHOUSE_ID}"
 
 # Name of the catalog to read/write to
 CATALOG_NAME = dbutils.widgets.get("catalog_name")
@@ -41,6 +41,13 @@ try:
 except AttributeError as e:
   print("This notebook must be run within a Databricks workflow.")
   raise e
+
+# COMMAND ----------
+
+# DBTITLE 1,Start Warehouse
+warehouse_start_time = time.time()
+WorkspaceClient().warehouses.start_and_wait(WAREHOUSE_ID)
+print(f"{int(time.time() - warehouse_start_time)}s Warehouse Startup Time")
 
 # COMMAND ----------
 
@@ -86,6 +93,10 @@ metrics_df.display()
 # COMMAND ----------
 
 # DBTITLE 1,Throughput
-sql_files = [x for x in dbutils.fs.ls(QUERY_PATH.replace('/dbfs','dbfs:')) if x.name.endswith('.sql')]
-n_sql_files = len(sql_files)
-print(f"TPC-DS queries per minute: {n_sql_files / (global_duration / 60)}")
+sql_files = [1 for x in dbutils.fs.ls(QUERY_PATH.replace('/dbfs','dbfs:')) if x.name.endswith('.sql')]
+n_sql_queries = len(sql_files) * QUERY_REPETITION_COUNT
+print(f"TPC-DS queries per minute: {n_sql_queries / (duration / 60)}")
+
+# COMMAND ----------
+
+
