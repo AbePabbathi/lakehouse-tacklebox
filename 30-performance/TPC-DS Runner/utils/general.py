@@ -29,6 +29,26 @@ _TPCDS_TABLE_NAMES = {
     "web_site",
 }
 
+############### Notebook Helpers #############
+def _convert_to_int_safe(s: str):
+    try: 
+        return int(s)
+    except ValueError as e:
+        if 'invalid literal for int()' in str(e):
+            return s
+        else: 
+          raise
+    except:
+        raise
+
+def get_widget_values(dbutils):
+    widgets_dict = {
+        k.lower().replace(" ", "_"): v
+        for k, v in dbutils.notebook.entry_point.getCurrentBindings().items()
+    }
+    
+    return {k: _convert_to_int_safe(v) for k,v in widgets_dict.items()}
+
 ############### Utils #############
 def can_default_authenticate_sdk():
     try:

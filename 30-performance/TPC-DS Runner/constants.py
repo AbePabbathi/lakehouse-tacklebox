@@ -3,15 +3,20 @@ pip install databricks-sdk -q
 
 # COMMAND ----------
 
+
+
+# COMMAND ----------
+
 import os
+import math
 from dataclasses import dataclass
-from utils.general import tables_already_exist
+from utils.general import tables_already_exist, get_widget_values
 
 @dataclass
 class Constants:
     ############### Variables dependant upon user parameters ##############
     # Number of GBs of TPCDS data to write
-    scale_factor: int
+    number_of_gb_of_data: int
 
     # Name of the catalog to write TPCDS data to
     catalog_name: str
@@ -23,7 +28,7 @@ class Constants:
     warehouse_size: str
 
     # Maximum number of clusters to scale to in the warehouse
-    max_num_warehouse_clusters: int
+    maximum_number_of_clusters: int
 
     # Number of concurrent threads
     concurrency: int
@@ -81,6 +86,17 @@ class Constants:
     # Name of the current databricks host
     host = f"https://{spark.conf.get('spark.databricks.workspaceUrl')}/"
 
+    def _validate_concurrency_will_utilize_cluster(self):
+        required_number_of_clusters = math.ceil(self.concurrency / 10)
+        if self.maximum_number_of_clusters > required_number_of_clusters:
+
+            print(
+                "Warning:\n"
+                "\tFor optimal performance, we recommend using 1 cluster per 10 levels of concurrency. Your currrent\n"
+                "\tconfiguration will underutilize the warehouse and a cheaper configuration shuold exhibit the same performance.\n"
+                f"\tPlease try using {required_number_of_clusters} clusters instead."
+            )
+
     def __post_init__(self):
         # Create a schema prefix if '' to ensure unrelated schemas are not deleted
         if self.schema_prefix == "":
@@ -88,7 +104,7 @@ class Constants:
 
         # Name of the schema that tpcds data and benchmarking metrics will be written to
         self.schema_name: str = (
-            f"{self.schema_prefix.rstrip('_')}_{self.scale_factor}_gb"
+            f"{self.schema_prefix.rstrip('_')}_{self.number_of_gb_of_data}_gb"
         )
 
         # Add schema to data path
@@ -96,4 +112,7 @@ class Constants:
 
         # Determine if TPC-DS tables already exist
         self.tables_already_exist = tables_already_exist(spark, self.catalog_name, self.schema_name)
+
+        # Param validations/warnings
+        self._validate_concurrency_will_utilize_cluster()
 

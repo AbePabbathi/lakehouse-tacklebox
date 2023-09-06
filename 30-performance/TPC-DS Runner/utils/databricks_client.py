@@ -54,7 +54,7 @@ class DatabricksClient:
 
     @property
     def warehouse_name(self):
-        return f"[AUTOMATED] {self.constants.current_user_name}'s TPCDS Benchmarking Warehouse - {self.constants.warehouse_size}, {self.constants.max_num_warehouse_clusters} Max Clusters"
+        return f"[AUTOMATED] {self.constants.current_user_name}'s TPCDS Benchmarking Warehouse - {self.constants.warehouse_size}, {self.constants.maximum_number_of_clusters} Max Clusters"
 
     ########### Cluster Configurations ###########
     def _get_data_generator_cluster_config(self) -> Dict:
@@ -105,7 +105,7 @@ class DatabricksClient:
                 "base_parameters": {
                     "tables_already_exist": self.constants.tables_already_exist,
                     "current_user_name": self.constants.current_user_name,
-                    "scale_factor": self.constants.scale_factor,
+                    "scale_factor": self.constants.number_of_gb_of_data,
                     "query_directory": self.constants.query_path,
                     "data_directory": self.constants.data_path,
                     "catalog_name": self.constants.catalog_name,
@@ -166,8 +166,8 @@ class DatabricksClient:
                 **{
                     "name": self.warehouse_name,
                     "cluster_size": self.constants.warehouse_size,
-                    "min_num_clusters": self.constants.max_num_warehouse_clusters,
-                    "max_num_clusters": self.constants.max_num_warehouse_clusters,
+                    "min_num_clusters": self.constants.maximum_number_of_clusters,
+                    "max_num_clusters": self.constants.maximum_number_of_clusters,
                     "auto_stop_mins": "5",
                     "warehouse_type": sql.WarehouseTypePairWarehouseType.PRO,
                     "enable_serverless_compute": "true",
