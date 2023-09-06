@@ -3,10 +3,6 @@ pip install databricks-sdk -q
 
 # COMMAND ----------
 
-
-
-# COMMAND ----------
-
 import os
 import math
 from dataclasses import dataclass
