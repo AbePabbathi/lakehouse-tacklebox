@@ -3,41 +3,64 @@ from typing import List
 from databricks.sdk import WorkspaceClient
 
 _TPCDS_TABLE_NAMES = {
-  'call_center',
-  'catalog_page',
-  'catalog_returns',
-  'catalog_sales',
-  'customer',
-  'customer_address',
-  'customer_demographics',
-  'date_dim',
-  'household_demographics',
-  'income_band',
-  'inventory',
-  'item',
-  'promotion',
-  'reason',
-  'ship_mode',
-  'store',
-  'store_returns',
-  'store_sales',
-  'time_dim',
-  'warehouse',
-  'web_page',
-  'web_returns',
-  'web_sales',
-  'web_site'
+    "call_center",
+    "catalog_page",
+    "catalog_returns",
+    "catalog_sales",
+    "customer",
+    "customer_address",
+    "customer_demographics",
+    "date_dim",
+    "household_demographics",
+    "income_band",
+    "inventory",
+    "item",
+    "promotion",
+    "reason",
+    "ship_mode",
+    "store",
+    "store_returns",
+    "store_sales",
+    "time_dim",
+    "warehouse",
+    "web_page",
+    "web_returns",
+    "web_sales",
+    "web_site",
 }
+
+############### Notebook Helpers #############
+def _convert_to_int_safe(s: str):
+    try: 
+        return int(s)
+    except ValueError as e:
+        if 'invalid literal for int()' in str(e):
+            return s
+        else: 
+          raise
+    except:
+        raise
+
+def get_widget_values(dbutils):
+    widgets_dict = {
+        k.lower().replace(" ", "_"): v
+        for k, v in dbutils.notebook.entry_point.getCurrentBindings().items()
+    }
+    
+    return {k: _convert_to_int_safe(v) for k,v in widgets_dict.items()}
 
 ############### Utils #############
 def can_default_authenticate_sdk():
     try:
         _ = WorkspaceClient()
     except Exception as e:
-        if 'cannot configure default credentials' in str(e):
-            raise Exception("""\nWe are using the Databricks Python SDK with default authentification. It requires that you run this notebook from a single-user cluster. Please modify the existing cluster or create a new cluster with an `Access Mode` of `Assigned`. Vist the below link for more:\n\thttps://docs.databricks.com/en/clusters/configure.html#what-is-cluster-access-mode\n""")
+        if "cannot configure default credentials" in str(e):
+            raise Exception(
+                """\nWe are using the Databricks Python SDK with default authentification. It requires that you run this notebook from a single-user cluster. Please modify the existing cluster or create a new cluster with an `Access Mode` of `Assigned`. Vist the below link for more:\n\thttps://docs.databricks.com/en/clusters/configure.html#what-is-cluster-access-mode\n"""
+            )
         else:
             raise
+
 
 def clean_path_for_native_python(path: str) -> str:
     return "/dbfs/" + path.lstrip("/").replace("dbfs", "").lstrip(":").lstrip("/")
@@ -65,15 +88,29 @@ def add_remote_file_to_dbfs(dbutils, file_url: str, dbfs_path: str) -> bool:
 
     # Ensure write
     return directory_not_empty(dbutils, dbfs_path)
-  
+
+
 def tables_already_exist(spark, catalog: str, schema: str) -> bool:
-    tables = set(
-      spark.sql(f"show tables in {catalog}.{schema}")
-        .where("tableName not ILIKE 'benchmark%'")
-        .select('tableName')
-        .toPandas()['tableName']
-    )
-    return all(x in tables for x in _TPCDS_TABLE_NAMES)
+    if (
+        spark.sql("show catalogs").where(f"catalog ILIKE '{catalog}'").limit(1).count()
+        > 0
+    ):
+        if (
+            spark.sql(f"show databases in {catalog}")
+            .where(f"databaseName ILIKE '{database}'")
+            .limit(1)
+            .count()
+            > 0
+        ):
+            tables = set(
+                spark.sql(f"show tables in {catalog}.{schema}")
+                .where("tableName not ILIKE 'benchmark%'")
+                .select("tableName")
+                .toPandas()["tableName"]
+            )
+            return all(x in tables for x in _TPCDS_TABLE_NAMES)
+
+    return False
 
 
 ################## DBFS Writes ####################

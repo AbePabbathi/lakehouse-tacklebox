@@ -17,13 +17,7 @@ dbutils.widgets.dropdown("Maximum Number of Clusters", "10", [str(x) for x in ra
 
 # DBTITLE 1,Pull Variables from Notebook Widgets
 constants = Constants(
-    scale_factor=int(dbutils.widgets.get("Number of GB of Data")),
-    catalog_name=dbutils.widgets.get("Catalog Name"),
-    schema_prefix=dbutils.widgets.get("Schema Prefix"),
-    warehouse_size=dbutils.widgets.get("Warehouse Size"),
-    max_num_warehouse_clusters=int(dbutils.widgets.get("Maximum Number of Clusters")),
-    concurrency=int(dbutils.widgets.get("Concurrency")),
-    query_repetition_count=int(dbutils.widgets.get("Query Repetition Count")),
+  **get_widget_values(dbutils)
 )
 
 # COMMAND ----------
