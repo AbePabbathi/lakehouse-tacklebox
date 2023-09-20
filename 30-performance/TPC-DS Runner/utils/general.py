@@ -151,7 +151,7 @@ def _add_init_script_to_dbfs(dbutils, init_script_path: str, jar_path: str) -> b
 def _add_beaker_whl_to_dbfs(dbutils, dbfs_path) -> bool:
     return add_remote_file_to_dbfs(
         dbutils=dbutils,
-        file_url="https://github.com/goodwillpunning/beaker/raw/ec66f9fb5ed1b6abee6b54f19bb2e44742a64284/dist/beaker-0.0.2-py2.py3-none-any.whl",
+        file_url="https://github.com/goodwillpunning/beaker/raw/main/dist/beaker-0.0.3-py3-none-any.whl",
         dbfs_path=dbfs_path,
     )
 
