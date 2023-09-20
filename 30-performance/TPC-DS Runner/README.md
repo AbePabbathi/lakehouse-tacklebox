@@ -2,6 +2,8 @@
 
 This tool runs the TPC-DS benchmark on a Databricks SQL warehouse. The TPC-DS benchmark is a standardised method of evaluating the performance of decision support solutions, such as databases, data warehouses, and big data systems.
 
+**Disclaimer: this tool is simple. It will not duplicate warehouse peak performance out-of-the-box. Instead, it's meant to be a transparent and representative baseline.**
+
 ## Quick Start
 #### 0 - Clone this repo via [Databricks Repos](https://docs.databricks.com/en/repos/index.html)
 
