@@ -97,7 +97,7 @@ def tables_already_exist(spark, catalog: str, schema: str) -> bool:
     ):
         if (
             spark.sql(f"show databases in {catalog}")
-            .where(f"databaseName ILIKE '{database}'")
+            .where(f"databaseName ILIKE '{schema}'")
             .limit(1)
             .count()
             > 0
