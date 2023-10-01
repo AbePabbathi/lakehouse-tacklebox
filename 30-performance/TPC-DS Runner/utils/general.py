@@ -172,3 +172,4 @@ def setup_files(dbutils, jar_path: str, init_script_path: str, beaker_whl_path: 
     assert (
         beaker_whl_created
     ), f"The init script path '{beaker_whl_path}' is empty. There was an error uploading it."
+    
