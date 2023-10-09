@@ -31,7 +31,7 @@ def getRenamedFilePath(source_path):
 
 # DBTITLE 1,Create test data set not in dbutils
 (spark.read.json("dbfs:/databricks-datasets/iot-stream/data-device/")
-.write.format("json").mode("overwrite").save('s3://oetrta/codyaustindavis/parallelfile_source/')
+.write.format("json").mode("overwrite").save('s3://<bucket_name/parallelfile_source/')
 )
 
 # COMMAND ----------
@@ -88,7 +88,7 @@ display(filesDf)
 # COMMAND ----------
 
 # DBTITLE 1,Confirm rename
-dbutils.fs.ls("s3://oetrta/codyaustindavis/parallelfile_source/renamed/"
+dbutils.fs.ls("s3://<bucket_name/parallelfile_source/renamed/"
 )
 
 # COMMAND ----------

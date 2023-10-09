@@ -183,7 +183,8 @@ def build_streaming_job(job_name, input_root_path, parent_job_name, event_names,
   tasks = [{
             "task_key": f"event_{event}",
             "notebook_task": {
-                "notebook_path": "/Repos/cody.davis@databricks.com/edw-best-practices/Advanced Notebooks/Multi-plexing with Autoloader/Option 1: Actually Multi-plexing tables on write/Child Job Template",
+                ## REPLACE with path of notebook in your env
+                "notebook_path": "/Repos/<user_name>/lakehouse-tackle-box/Advanced Notebooks/Multi-plexing with Autoloader/Option 1: Actually Multi-plexing tables on write/Child Job Template",
                 "base_parameters": {
                     "Input Root Path": "dbfs:/databricks-datasets/iot-stream/data-device/",
                     "Parent Job Name": parent_job_name,
@@ -271,7 +272,8 @@ def update_streaming_job(job_id, job_name, parent_job_name, event_names, tasks_p
   tasks = [{
             "task_key": f"event_{event}",
             "notebook_task": {
-                "notebook_path": "/Repos/cody.davis@databricks.com/edw-best-practices/Advanced Notebooks/Multi-plexing with Autoloader/Option 1: Actually Multi-plexing tables on write/Child Job Template",
+              ## REPLACE with your notebooks path in your env
+                "notebook_path": "/Repos/<user_name>/edw-best-practices/Advanced Notebooks/Multi-plexing with Autoloader/Option 1: Actually Multi-plexing tables on write/Child Job Template",
                 "base_parameters": {
                     "Input Root Path": "dbfs:/databricks-datasets/iot-stream/data-device/",
                     "Parent Job Name": parent_job_name,

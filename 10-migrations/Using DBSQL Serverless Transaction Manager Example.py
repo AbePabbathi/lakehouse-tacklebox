@@ -10,7 +10,7 @@ from helperfunctions.dbsqltransactions import DBSQLTransactionManager
 # DBTITLE 1,Example Inputs For Client
 token = None ## optional
 host_name = None ## optional
-warehouse_id = "475b94ddc7cd5211"
+warehouse_id = "<warehouse_id>"
 
 # COMMAND ----------
 

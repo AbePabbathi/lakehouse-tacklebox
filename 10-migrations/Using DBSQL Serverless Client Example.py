@@ -12,7 +12,7 @@ from helperfunctions.dbsqlclient import ServerlessClient
 
 token = None ## optional
 host_name = None ## optional
-warehouse_id = "475b94ddc7cd5211"
+warehouse_id = "<warehouse_id"
 
 ## Single Query Example
 sql_statement = "SELECT concat_ws('-', M.id, N.id, random()) as ID FROM range(1000) AS M, range(1000) AS N LIMIT 10000000"
