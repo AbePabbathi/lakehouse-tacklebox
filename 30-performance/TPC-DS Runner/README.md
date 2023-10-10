@@ -17,12 +17,18 @@ This tool runs the TPC-DS benchmark on a Databricks SQL warehouse. The TPC-DS be
 * Note that you may have to run the first cell in the notebook to see the widgets. 
 <img src="./assets/images/filters.png" width="600">
 
-Parameters
+## Parameters
+Data
 * **Catalog Name**: the name of the catalog to write to for non-UC configurations
 * **Schema Prefix**: a string that will be prepended to the dynamically-generated schema name
 * **Number of GB of Data**: the number of gigabytes of TPC-DS data to be written. `1` indicates that the sum of all table sizes will be ~1GB. 
+
+Warehouse
 * **Maximum Number of Clusters**: the maximum number of workers to which a SQL warehouse can scale
 * **Warehouse Size**: T-shirt size of the SQL warehouse workers
+* **Channel**: the warehouse channel, which correspond to the underlying DBR version
+
+Load Testing
 * **Concurrency**: the simulated number of users executing the TPC-DS queries. On the backend, this corresponds to the number of Python threads.
 * **Query Repeatition Count**: the number of times the TPC-DS queries will be repeatedly run. `2` indicates that each TPC-DS query will be run twice. Note that caching is disabled, so repeated queries will not hit cache.
 

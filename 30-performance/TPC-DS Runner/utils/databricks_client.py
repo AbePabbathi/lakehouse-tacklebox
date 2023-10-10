@@ -153,6 +153,13 @@ class DatabricksClient:
                 return w.id
 
         return None
+    
+    @property
+    def warehouse_channel_name(self):
+        if self.constants.channel == "Preview":
+            return sql.ChannelName.CHANNEL_NAME_PREVIEW
+        elif self.constants.channel == "Current":
+            return sql.ChannelName.CHANNEL_NAME_CURRENT
 
     def create_warehouse(self):
         warehouse_id = self.get_warehouse_id_for_name(self.warehouse_name)
@@ -173,6 +180,6 @@ class DatabricksClient:
                     "enable_serverless_compute": "true",
                     "enable_photon": "true",
                     "spot_instance_policy": sql.SpotInstancePolicy.RELIABILITY_OPTIMIZED,
-                    "channel": sql.Channel(name=sql.ChannelName.CHANNEL_NAME_PREVIEW),
+                    "channel": sql.Channel(name=self.warehouse_channel_name),
                 }
             )

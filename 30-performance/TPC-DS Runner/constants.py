@@ -26,6 +26,9 @@ class Constants:
     # Maximum number of clusters to scale to in the warehouse
     maximum_number_of_clusters: int
 
+    # Warehouse channel name
+    channel: str
+
     # Number of concurrent threads
     concurrency: int
 

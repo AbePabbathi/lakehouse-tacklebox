@@ -7,6 +7,7 @@ dbutils.widgets.text("Concurrency", "50")
 dbutils.widgets.dropdown("Query Repetition Count", "30", [str(x) for x in range(1,101)])
 dbutils.widgets.dropdown("Warehouse Size", "Small", ["2X-Small","X-Small","Small","Medium","Large","X-Large","2X-Large","3X-Large","4X-Large"])
 dbutils.widgets.dropdown("Maximum Number of Clusters", "2", [str(x) for x in range(1,41)])
+dbutils.widgets.dropdown("Channel", "Preview", ["Preview","Current"])
 
 # COMMAND ----------
 
