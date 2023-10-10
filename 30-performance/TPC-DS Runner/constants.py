@@ -1,5 +1,9 @@
 # Databricks notebook source
-pip install databricks-sdk -q
+pip install --upgrade databricks-sdk -q
+
+# COMMAND ----------
+
+dbutils.library.restartPython()
 
 # COMMAND ----------
 
