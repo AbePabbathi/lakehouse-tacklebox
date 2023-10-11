@@ -14,6 +14,7 @@ This tool runs the TPC-DS benchmark on a Databricks SQL warehouse. The TPC-DS be
 <img src="./assets/images/cluster.png" width="600">
 
 Note that if you're using a unity catalog (UC) table, UC must be enabled on this cluster.
+Note that we don't support serverless clusters at this time.
 
 #### 3 - Run your parameters
 * Note that you may have to run the first cell in the notebook to see the widgets. 
