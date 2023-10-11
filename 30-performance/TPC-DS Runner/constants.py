@@ -10,7 +10,7 @@ dbutils.library.restartPython()
 import os
 import math
 from dataclasses import dataclass
-from utils.general import tables_already_exist, get_widget_values
+from utils.general import tables_already_exist, get_widget_values, create_widgets
 
 @dataclass
 class Constants:
@@ -115,10 +115,6 @@ class Constants:
 
         # Determine if TPC-DS tables already exist
         self.tables_already_exist = tables_already_exist(spark, self.catalog_name, self.schema_name)
-
-        # Validate that the catalog exists
-        if spark.sql(f"show catalogs like '{self.catalog_name}'").count() == 0:
-            raise NameError(f"{self.catalog_name} does not exist. Please manually create the catalog.")
 
         # Param validations/warnings
         self._validate_concurrency_will_utilize_cluster()

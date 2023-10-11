@@ -17,7 +17,7 @@ from databricks.sdk import WorkspaceClient
 
 # Host and PAT for beaker authentication
 HOST = spark.conf.get('spark.databricks.workspaceUrl')
-PAT = WorkspaceClient().tokens.create(comment='temp use', lifetime_seconds=60*30).token_value
+PAT = WorkspaceClient().tokens.create(comment='temp use', lifetime_seconds=60*60*12).token_value
 
 # ID of the warehouse to run benchmarks with
 WAREHOUSE_ID = dbutils.widgets.get("warehouse_id")

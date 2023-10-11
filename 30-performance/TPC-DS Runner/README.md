@@ -10,8 +10,10 @@ This tool runs the TPC-DS benchmark on a Databricks SQL warehouse. The TPC-DS be
 #### 1 - Open the main notebook
 <img src="./assets/images/main_notebook.png" width="600">
 
-#### 2 - Create or attach to a `Assigned Mode` Cluster
-<img src="./assets/images/assigned_mode_cluster.png" width="600">
+#### 2 - Create or Attach to Cluster
+<img src="./assets/images/cluster.png" width="600">
+
+Note that if you're using a unity catalog (UC) table, UC must be enabled on this cluster.
 
 #### 3 - Run your parameters
 * Note that you may have to run the first cell in the notebook to see the widgets. 
