@@ -1,12 +1,16 @@
 # Databricks notebook source
-pip install databricks-sdk -q
+pip install --upgrade databricks-sdk -q
+
+# COMMAND ----------
+
+dbutils.library.restartPython()
 
 # COMMAND ----------
 
 import os
 import math
 from dataclasses import dataclass
-from utils.general import tables_already_exist, get_widget_values
+from utils.general import tables_already_exist, get_widget_values, create_widgets
 
 @dataclass
 class Constants:
@@ -25,6 +29,9 @@ class Constants:
 
     # Maximum number of clusters to scale to in the warehouse
     maximum_number_of_clusters: int
+
+    # Warehouse channel name
+    channel: str
 
     # Number of concurrent threads
     concurrency: int

@@ -29,39 +29,68 @@ _TPCDS_TABLE_NAMES = {
     "web_site",
 }
 
+# widgets in format (dbutils type, args)
+_WIDGETS = [
+    ("text", ("Catalog Name", "hive_metastore")),
+    ("text", ("Schema Prefix", "tpcds")),
+    ("dropdown", ("Number of GB of Data", "1", ["1", "10", "100", "500", "1000"])),
+    ("text", ("Concurrency", "50")),
+    ("dropdown", ("Query Repetition Count", "30", [str(x) for x in range(1, 101)])),
+    (
+        "dropdown",
+        (
+            "Warehouse Size",
+            "Small",
+            [
+                "2X-Small",
+                "X-Small",
+                "Small",
+                "Medium",
+                "Large",
+                "X-Large",
+                "2X-Large",
+                "3X-Large",
+                "4X-Large",
+            ],
+        ),
+    ),
+    ("dropdown", ("Maximum Number of Clusters", "2", [str(x) for x in range(1, 41)])),
+    ("dropdown", ("Channel", "Preview", ["Preview", "Current"])),
+]
+
 ############### Notebook Helpers #############
 def _convert_to_int_safe(s: str):
-    try: 
+    try:
         return int(s)
     except ValueError as e:
-        if 'invalid literal for int()' in str(e):
+        if "invalid literal for int()" in str(e):
             return s
-        else: 
-          raise
+        else:
+            raise
     except:
         raise
 
+
+def create_widgets(dbutils):
+    dbutils.widgets.removeAll()
+
+    for widget_type, args in _WIDGETS:
+        if widget_type == "text":
+            dbutils.widgets.text(*args)
+        elif widget_type == "dropdown":
+            dbutils.widgets.dropdown(*args)
+        else:
+            raise TypeError(f"{widget_type} type is not supported.")
+
+
 def get_widget_values(dbutils):
-    widgets_dict = {
-        k.lower().replace(" ", "_"): v
-        for k, v in dbutils.notebook.entry_point.getCurrentBindings().items()
-    }
-    
-    return {k: _convert_to_int_safe(v) for k,v in widgets_dict.items()}
+    widgets_dict = {args[0]: dbutils.widgets.get(args[0]) for _, args in _WIDGETS}
+    widgets_cleaned = {k.lower().replace(" ", "_"): v for k, v in widgets_dict.items()}
+
+    return {k: _convert_to_int_safe(v) for k, v in widgets_cleaned.items()}
+
 
 ############### Utils #############
-def can_default_authenticate_sdk():
-    try:
-        _ = WorkspaceClient()
-    except Exception as e:
-        if "cannot configure default credentials" in str(e):
-            raise Exception(
-                """\nWe are using the Databricks Python SDK with default authentification. It requires that you run this notebook from a single-user cluster. Please modify the existing cluster or create a new cluster with an `Access Mode` of `Assigned`. Vist the below link for more:\n\thttps://docs.databricks.com/en/clusters/configure.html#what-is-cluster-access-mode\n"""
-            )
-        else:
-            raise
-
-
 def clean_path_for_native_python(path: str) -> str:
     return "/dbfs/" + path.lstrip("/").replace("dbfs", "").lstrip(":").lstrip("/")
 
