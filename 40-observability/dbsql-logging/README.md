@@ -7,7 +7,7 @@ This tool is a collection notebooks that pulls together data from 4 different AP
 
 Creator: holly.smith@databricks.com
 
-[Check out the Video Tutorial](https://drive.google.com/file/d/1OzTuSIZg-o_9CX54qGMYc0nqhX-UfcUi/view?usp=sharing)
+[Check out the Video Tutorial](https://drive.google.com/file/d/12Sa5yT_PVb0U4XMkepeHWI9UEkuXoV_9/view?usp=sharing)
 
 #### Setup
 This tool has been tested with the following 
