@@ -49,7 +49,6 @@ from helperfunctions.deltahelpers import DeltaHelpers, DeltaMergeHelpers ## For 
 # DBTITLE 1,Scope Session
 # MAGIC %sql
 # MAGIC CREATE DATABASE IF NOT EXISTS main.iot_dashboard;
-# MAGIC
 # MAGIC USE CATALOG main;
 # MAGIC USE SCHEMA iot_dashboard;
 
@@ -156,6 +155,8 @@ try:
 
   serverless_client.sql(copy_into_sql)
 
+  delta_logger.log_run_info(msg = 'COPY INTO complete')
+
 except Exception as e:
 
   delta_logger.log_run_info(log_level='CRITICAL', msg='Failed to COPY INTO with error')
@@ -170,13 +171,7 @@ except Exception as e:
 batch_id = 1
 
 mst_scd_transaction_sql = f"""
-
--- Step 1 - get state of the active batch
-
---DECLARE OR REPLACE VARIABLE var_batch_id STRING = uuid();
-
--- Optional intra-batch pre insert/merge de-cup
-CREATE OR REPLACE TABLE iot_dashboard.temp_batch_to_insert
+CREATE OR REPLACE TABLE main.iot_dashboard.temp_batch_to_insert
 AS
 WITH de_dup (
 SELECT Id::integer,
@@ -189,7 +184,7 @@ SELECT Id::integer,
               value::string,
               ingest_timestamp,
               ROW_NUMBER() OVER(PARTITION BY device_id, user_id, timestamp ORDER BY ingest_timestamp DESC) AS DupRank
-              FROM iot_dashboard.bronze_sensors_scd_2
+              FROM main.iot_dashboard.bronze_sensors_scd_2
               )
               
 SELECT Id, device_id, user_id, calories_burnt, miles_walked, num_steps, timestamp, value, ingest_timestamp, 
@@ -200,65 +195,32 @@ FROM de_dup
 WHERE DupRank = 1
 ;
 
-MERGE INTO iot_dashboard.silver_sensors_scd_2 AS target
-USING ( 
 
-      SELECT updates.Id AS merge_key_id,
-        updates.user_id AS merge_key_user_id,
-        updates.device_id AS merge_key_device_id,
-        updates.* --merge key can be built in whatever way makes sense to get unique rows
-      FROM iot_dashboard.temp_batch_to_insert AS updates
-    
-      UNION ALL
-
-      -- These rows will INSERT updated rows of existing records and new rows
-      -- Setting the merge_key to NULL forces these rows to NOT MATCH and be INSERTed.
-      SELECT 
-      NULL AS merge_key_id,
-      NULL AS merge_key_user_id,
-      NULL AS merge_key_device_id,
-      updates.*
-      FROM iot_dashboard.temp_batch_to_insert AS updates
-      INNER JOIN iot_dashboard.silver_sensors_scd_2 as target_table
-      ON updates.Id = target_table.Id
-      AND updates.user_id = target_table.user_id
-      AND updates.device_id = target_table.device_id  -- What makes the key unique
-      -- This needs to be accounted for when deciding to expire existing rows
-      WHERE updates.value <> target_table.value -- Only update if any of the data has changed
-
-        ) AS source
-        
-ON target.Id = source.merge_key_id
-AND target.user_id = source.merge_key_user_id
-AND target.device_id = source.merge_key_device_id
-
-WHEN MATCHED AND (target._is_current = true AND target.value <> source.value) THEN
-UPDATE SET
-target._end_timestamp = source._start_timestamp, -- start of new record is end of old record
-target._is_current = false
-
-WHEN NOT MATCHED THEN 
-INSERT (id, device_id, user_id, calories_burnt, miles_walked, num_steps, value, timestamp, ingest_timestamp, _start_timestamp, _end_timestamp, _is_current, _batch_run_id)
-VALUES  (
-source.id, source.device_id, source.user_id, source.calories_burnt, source.miles_walked, source.num_steps, source.value, source.timestamp, 
-source.ingest_timestamp,
-source._start_timestamp, -- start timestamp -- new records
-NULL ,-- end_timestamp 
-source._is_current, -- is current record
-source._batch_run_id --example batch run id
-)
+MERGE INTO main.iot_dashboard.silver_sensors_scd_2 AS target
+USING main.iot_dashboard.temp_batch_to_insert AS source
+-- MERGE on unique record id
+ON source.Id = target.Id
+AND source.user_id = target.user_id
+AND source.device_id = target.device_id
+AND target._is_current = true
+-- Instead of updating the record values, we flag the records as "is_current = false"
+-- We never actually CHANGE the data to track changes over time
+WHEN MATCHED THEN UPDATE SET 
+  target._end_timestamp = source._start_timestamp, -- start of new record is end of old record
+  target._is_current = false
 ;
 
--- This calculate table stats for all columns to ensure the optimizer can build the best plan
--- THIS IS NOT INCREMENTAL
-ANALYZE TABLE iot_dashboard.silver_sensors_scd_2 COMPUTE STATISTICS FOR ALL COLUMNS;
-
--- THIS IS INCREMENTAL
-OPTIMIZE iot_dashboard.silver_sensors_scd_2 ZORDER BY (timestamp, device_id);
-
--- Truncate bronze batch once successfully loaded
--- If succeeds remove temp table
-TRUNCATE TABLE iot_dashboard.temp_batch_to_insert;
+-- Seprate INSERT INTO both NEW records and REPLACING records
+INSERT INTO main.iot_dashboard.silver_sensors_scd_2
+(id, device_id, user_id, calories_burnt, miles_walked, num_steps, value, timestamp, ingest_timestamp, _start_timestamp, _end_timestamp, _is_current, _batch_run_id)
+SELECT  
+source.id, source.device_id, source.user_id, source.calories_burnt, source.miles_walked, source.num_steps, source.value, source.timestamp, 
+source.ingest_timestamp,
+ source._start_timestamp, -- start timestamp -- new records
+NULL AS _end_timestamp,-- end_timestamp 
+ source._is_current, -- is current record
+source._batch_run_id --example batch run id
+FROM main.iot_dashboard.temp_batch_to_insert AS source;
 """
 
 
@@ -267,6 +229,8 @@ try:
 
   serverless_transaction_manager.execute_dbsql_transaction(mst_scd_transaction_sql, tables_to_manage=["main.iot_dashboard.silver_sensors_scd_2"])
 
+  delta_logger.log_run_info(msg='SCD 2 MERGE Complete')
+  
 except Exception as e:
 
   delta_logger.log_run_info(log_level='CRITICAL', msg='Failed to MERGE with error')
@@ -283,6 +247,7 @@ except Exception as e:
 try: 
 
   serverless_client.sql("TRUNCATE TABLE main.iot_dashboard.temp_batch_to_insert")
+  delta_logger.log_run_info(msg='Batch cleared!')
 
 except Exception as e:
 
@@ -290,10 +255,11 @@ except Exception as e:
 
 
 ## Optimize command
-
 try: 
 
   serverless_client.sql("OPTIMIZE main.iot_dashboard.silver_sensors_scd_2 ZORDER BY (timestamp, device_id)")
+  
+  delta_logger.log_run_info(msg='Target tables optimized!')
 
 except Exception as e:
 
@@ -344,10 +310,11 @@ try:
 
   serverless_client.submit_multiple_sql_commands(gold_views_sql)
 
+  delta_logger.log_run_info(msg='Operational View Created!')
+
 except Exception as e:
 
   delta_logger.log_run_info(log_level='CRITICAL', msg='couldnt find table, all should exist')
-  
   raise(e)
 
 
@@ -364,8 +331,6 @@ delta_logger.full_table_name
 
 # MAGIC %sql
 # MAGIC
-# MAGIC SELECT * FROM main.iot_dashboard.logger
-
-# COMMAND ----------
-
-{"status_changes": [{"status": "CREATED", "event_timestamp": "2023-10-29 21:44:32.256598"}, {"status": "SUCCESS", "event_timestamp": "2023-10-29 21:49:50.975403"}], "metadata": [null, {"status_changes": [{"status": "CREATED", "event_timestamp": "2023-10-29 21:44:32.256598"}], "metadata": [null, {"log_level": "CRITICAL", "log_data": {"event_ts": "2023-10-29 21:45:19.942345", "msg": "Failed to MERGE with error"}}]}, {"status_changes": [{"status": "CREATED", "event_timestamp": "2023-10-29 21:44:32.256598"}], "metadata": [null, {"status_changes": [{"status": "CREATED", "event_timestamp": "2023-10-29 21:44:32.256598"}], "metadata": [null, {"log_level": "CRITICAL", "log_data": {"event_ts": "2023-10-29 21:45:19.942345", "msg": "Failed to MERGE with error"}}]}, {"log_level": "CRITICAL", "log_data": {"event_ts": "2023-10-29 21:46:04.728005", "msg": "Failed to MERGE with error"}}]}, {"status_changes": [{"status": "CREATED", "event_timestamp": "2023-10-29 21:44:32.256598"}], "metadata": [null, {"status_changes": [{"status": "CREATED", "event_timestamp": "2023-10-29 21:44:32.256598"}], "metadata": [null, {"log_level": "CRITICAL", "log_data": {"event_ts": "2023-10-29 21:45:19.942345", "msg": "Failed to MERGE with error"}}]}, {"status_changes": [{"status": "CREATED", "event_timestamp": "2023-10-29 21:44:32.256598"}], "metadata": [null, {"status_changes": [{"status": "CREATED", "event_timestamp": "2023-10-29 21:44:32.256598"}], "metadata": [null, {"log_level": "CRITICAL", "log_data": {"event_ts": "2023-10-29 21:45:19.942345", "msg": "Failed to MERGE with error"}}]}, {"log_level": "CRITICAL", "log_data": {"event_ts": "2023-10-29 21:46:04.728005", "msg": "Failed to MERGE with error"}}]}, {"log_level": "INFO", "log_data": {"event_ts": "2023-10-29 21:48:22.596424", "msg": "couldnt find table, was already deleted"}}]}]}
+# MAGIC SELECT *
+# MAGIC  FROM main.iot_dashboard.logger 
+# MAGIC ORDER BY run_id DESC
