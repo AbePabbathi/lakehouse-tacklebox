@@ -24,6 +24,7 @@ class DBSQLTransactionManager(Transaction):
 
     serverless_client = ServerlessClient(warehouse_id = self.warehouse_id, token=self.token, host_name=self.host_name) ## token=<optional>, host_name=<optional>verbose=True for print statements and other debugging messages
     
+    result_df = None
     stmts = [i for i in sql_string.split(";") if len(i) >0]
 
     ## Save to class state

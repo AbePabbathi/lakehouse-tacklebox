@@ -33,7 +33,7 @@
 # MAGIC DROP TABLE IF EXISTS iot_dashboard.bronze_sensors_optimization;
 # MAGIC CREATE OR REPLACE TABLE iot_dashboard.bronze_sensors_optimization
 # MAGIC USING DELTA
-# MAGIC TBLPROPERTIES("delta.targetFileSize"="2mb") --2-128 mb for tables with heavy updates or if used for BI
+# MAGIC TBLPROPERTIES("delta.targetFileSize"="64mb") --2-128 mb for tables with heavy updates or if used for BI
 # MAGIC AS 
 # MAGIC (SELECT * FROM iot_dashboard.silver_sensors LIMIT 10000) --Only load a subset for sample MERGE;
 

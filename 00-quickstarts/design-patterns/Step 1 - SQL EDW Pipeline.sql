@@ -264,14 +264,37 @@ SELECT * FROM iot_dashboard.silver_sensors VERSION AS OF 1;
 
 -- COMMAND ----------
 
+-- MAGIC %sql
+-- MAGIC
+-- MAGIC
+-- MAGIC SELECT * FROM iot_dashboard.silver_sensors
+-- MAGIC WHERE user_id = 11
+
+-- COMMAND ----------
+
 -- DBTITLE 1,Change Size of Files - will be changed when files are optimized
 ALTER TABLE iot_dashboard.silver_sensors SET TBLPROPERTIES ('delta.targetFileSize'='64mb');
 
 -- COMMAND ----------
 
+-- MAGIC %sql
+-- MAGIC
+-- MAGIC CREATE OR REPLACE TABLE iot_dashboard.unoptimized_sensors
+-- MAGIC AS
+-- MAGIC SELECT * FROM iot_dashboard.silver_sensors;
+
+-- COMMAND ----------
+
+SELECT 
+*
+FROM iot_dashboard.unoptimized_sensors
+WHERe device_id = 1
+
+-- COMMAND ----------
+
 -- DBTITLE 1,Table Optimizations
 -- You want to optimize by high cardinality columns like ids, timestamps, strings
-OPTIMIZE iot_dashboard.silver_sensors ZORDER BY (device_id, timestamp);
+OPTIMIZE iot_dashboard.silver_sensors ZORDER BY (timestamp, user_id);
 
 -- COMMAND ----------
 

@@ -129,6 +129,7 @@ now() AS processed_watermark
 FROM STREAM main.iot_dashboard.streaming_tables_raw_data
 ;
 
+
 -- COMMAND ----------
 
 DESCRIBE DETAIL main.iot_dashboard.streaming_silver_staging
