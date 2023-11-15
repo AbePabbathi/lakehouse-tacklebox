@@ -52,7 +52,7 @@
 
 # COMMAND ----------
 
-# DBTITLE 1,Variables for batch processing
+# DBTITLE 1,Variables for batch processing - session level batch id and batch timestamp
 # MAGIC %sql
 # MAGIC
 # MAGIC DECLARE OR REPLACE VARIABLE batch_id STRING = uuid();
@@ -64,7 +64,7 @@
 
 # COMMAND ----------
 
-# DBTITLE 1,Complex Data in Variables
+# DBTITLE 1,Complex Data in Variables for advanced configuration
 # MAGIC %sql
 # MAGIC
 # MAGIC -- This is great for redability and reusability downstream
@@ -93,7 +93,7 @@
 # MAGIC       num_steps::decimal(10,2) AS num_steps, 
 # MAGIC       timestamp::timestamp AS timestamp,
 # MAGIC       value  AS value, -- This is a JSON object,
-# MAGIC       batch_metadata.batch_id AS batch_id,
+# MAGIC       batch_metadata.batch_id AS batch_id, -- Using Variables in the SQL Queries 
 # MAGIC       batch_metadata.batch_timestamp AS batch_timestamp
 # MAGIC FROM "/databricks-datasets/iot-stream/data-device/")
 # MAGIC FILEFORMAT = json -- csv, xml, txt, parquet, binary, etc.
@@ -122,6 +122,7 @@
 
 # COMMAND ----------
 
+# DBTITLE 1,Batch Watermarking with Variables
 # MAGIC %sql
 # MAGIC
 # MAGIC -- Get max process timestamp in silver table
@@ -162,7 +163,7 @@
 
 # COMMAND ----------
 
-# DBTITLE 1,Update Variable
+# DBTITLE 1,Update Variable after silver batch - new watermark
 # MAGIC %sql
 # MAGIC
 # MAGIC SET VARIABLE watermark_timestamp = 
@@ -172,18 +173,19 @@
 
 # COMMAND ----------
 
-# DBTITLE 1,Get Batch Ids in process - ? Buggy no complex types list a list?
+# DBTITLE 1,Get Batch information with Array <String> Types
 # MAGIC %sql
 # MAGIC
 # MAGIC DECLARE OR REPLACE VARIABLE active_batches ARRAY<STRING> DEFAULT ARRAY('');
 # MAGIC
-# MAGIC SET VAR active_batches = (SELECT collect_list(batch_id) FROM main.iot_dashboard.bronze_sensors);
+# MAGIC SET VARIABLE active_batches = (SELECT collect_list(DISTINCT batch_id) FROM main.iot_dashboard.bronze_sensors);
 # MAGIC
 # MAGIC SELECT active_batches;
 # MAGIC
 
 # COMMAND ----------
 
+# DBTITLE 1,Load Configs into Variables with Custom runId / Config tables
 # MAGIC %sql
 # MAGIC
 # MAGIC USE CATALOG main;
@@ -211,5 +213,17 @@
 
 # MAGIC %sql
 # MAGIC
+# MAGIC SELECT config.timestamp FROM param_configs
+# MAGIC WHERE id = 1
+
+# COMMAND ----------
+
+# MAGIC %sql
 # MAGIC
-# MAGIC CREATE OR REPLACE FUNCTION 
+# MAGIC
+# MAGIC DECLARE OR REPLACE VARIABLE config_ts TIMESTAMP DEFAULT now();
+# MAGIC
+# MAGIC SET VARIABLE config_ts = (SELECT MAX(config.timestamp) FROM param_configs
+# MAGIC WHERE id = 1);
+# MAGIC
+# MAGIC SELECT config_ts;

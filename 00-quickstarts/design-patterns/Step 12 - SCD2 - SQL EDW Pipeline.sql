@@ -22,7 +22,8 @@
 
 DROP DATABASE IF EXISTS iot_dashboard CASCADE;
 CREATE DATABASE IF NOT EXISTS iot_dashboard;
-USE iot_dashboard;
+USE CATALOG main;
+USE SCHEMA iot_dashboard;
 
 -- COMMAND ----------
 
