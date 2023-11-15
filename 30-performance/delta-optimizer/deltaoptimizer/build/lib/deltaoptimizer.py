@@ -36,7 +36,8 @@ class DeltaOptimizerBase():
                  database_filter_list = [], 
                  table_filter_mode='all', 
                  table_filter_list=[], 
-                 shuffle_partitions=None):
+                 shuffle_partitions=None,
+                 query_history_partition_cols:[str] = None):
 
         ## Assumes running on a spark environment
 
@@ -44,6 +45,7 @@ class DeltaOptimizerBase():
         self.database_location = database_location
         self.spark = SparkSession.getActiveSession()
         self.shuffle_partitions = shuffle_partitions if None else self.spark.sparkContext.defaultParallelism*2
+        self.query_history_partition_cols = query_history_partition_cols
         ## set parallelism based on cluster
         
         if shuffle_partitions is None:
@@ -115,21 +117,42 @@ class DeltaOptimizerBase():
                            WorkspaceName STRING,
                            StartTimestamp TIMESTAMP,
                            EndTimestamp TIMESTAMP)
-                           USING DELTA""")
+                           USING delta TBLPROPERTIES('delta.feature.allowColumnDefaults' = 'supported',
+                         'delta.columnMapping.mode' = 'name', 
+                         'delta.enableDeletionVectors' = true)
+                           """)
 
-        self.spark.sql(f"""CREATE TABLE IF NOT EXISTS {self.database_name}.raw_query_history_statistics
+        ## v1.5.5 this can be a very big table so adding capabilities to customerize partitioning
+        if self.query_history_partition_cols is not None:
+          partition_str = ", ".join([i for i in self.query_history_partition_cols if len(i)> 0])
+        else:
+          partition_str = "update_date"
+
+        self.spark.sql(f"""CREATE TABLE IF NOT EXISTS main.delta_optimizer.raw_query_history_statistics
                         (Id BIGINT GENERATED ALWAYS AS IDENTITY,
-                        query_id STRING,
-                        query_hash STRING,
-                        query_start_time_ms FLOAT,
-                        query_end_time_ms FLOAT,
-                        duration FLOAT,
-                        query_text STRING,
-                        status STRING,
-                        statement_type STRING,
-                        rows_produced FLOAT,
-                        metrics MAP<STRING, FLOAT>)
-                        USING DELTA""")
+                          query_id STRING,
+                          query_hash STRING, -- v.1.4.0 - MUST PARSE DISTINCT Queryies cause DBX query id is not by query
+                          query_start_time_ms FLOAT ,
+                          query_end_time_ms FLOAT,
+                          duration FLOAT ,
+                          status STRING,
+                          statement_type STRING,
+                          error_message STRING,
+                          executed_as_user_id FLOAT,
+                          executed_as_user_name STRING,
+                          rows_produced FLOAT,
+                          metrics MAP<STRING, FLOAT>,
+                          endpoint_id STRING,
+                          channel_used STRING,
+                          lookup_key STRING,
+                          update_timestamp TIMESTAMP,
+                          update_date DATE,
+                          query_text STRING)
+                        USING delta TBLPROPERTIES('delta.feature.allowColumnDefaults' = 'supported',
+                         'delta.columnMapping.mode' = 'name', 
+                         'delta.enableDeletionVectors' = true)
+                        PARTITIONED BY ({partition_str})
+              """)
 
         self.spark.sql(f"""CREATE TABLE IF NOT EXISTS {self.database_name}.parsed_distinct_queries
                         (
@@ -138,7 +161,10 @@ class DeltaOptimizerBase():
                         query_text STRING,
                         profiled_columns ARRAY<STRING>
                         )
-                        USING DELTA""")
+                        USING delta TBLPROPERTIES('delta.feature.allowColumnDefaults' = 'supported',
+                         'delta.columnMapping.mode' = 'name', 
+                         'delta.enableDeletionVectors' = true)
+                        """)
         
         self.spark.sql(f"""CREATE TABLE IF NOT EXISTS {self.database_name}.read_statistics_scaled_results
                 (
@@ -160,7 +186,11 @@ class DeltaOptimizerBase():
                 AvgQueryDurationScaled DOUBLE,
                 TotalColumnOccurrencesForAllQueriesScaled DOUBLE,
                 AvgColumnOccurrencesInQueriesScaled DOUBLE
-                )""")
+                )
+                USING delta TBLPROPERTIES('delta.feature.allowColumnDefaults' = 'supported',
+                         'delta.columnMapping.mode' = 'name', 
+                         'delta.enableDeletionVectors' = true)
+                """)
 
         self.spark.sql(f"""CREATE TABLE IF NOT EXISTS {self.database_name}.read_statistics_column_level_summary
                 (
@@ -177,7 +207,11 @@ class DeltaOptimizerBase():
                 AvgQueryDuration DOUBLE,
                 TotalColumnOccurrencesForAllQueries LONG,
                 AvgColumnOccurrencesInQueryies DOUBLE
-                )""")
+                )
+                USING delta TBLPROPERTIES('delta.feature.allowColumnDefaults' = 'supported',
+                         'delta.columnMapping.mode' = 'name', 
+                         'delta.enableDeletionVectors' = true)
+                """)
 
         self.spark.sql(f"""CREATE TABLE IF NOT EXISTS {self.database_name}.query_summary_statistics (
                 query_id STRING, -- !!THIS IS THE QUERY HASH - SELF BUILT UNIQUE QUERY ID
@@ -185,7 +219,11 @@ class DeltaOptimizerBase():
                 AverageRowsProduced DOUBLE,
                 TotalQueryRuns LONG,
                 DurationTimesRuns DOUBLE
-                )""")
+                )
+                USING delta TBLPROPERTIES('delta.feature.allowColumnDefaults' = 'supported',
+                         'delta.columnMapping.mode' = 'name', 
+                         'delta.enableDeletionVectors' = true)
+                """)
 
         self.spark.sql(f"""CREATE TABLE IF NOT EXISTS {self.database_name}.query_column_statistics
                 (
@@ -202,7 +240,11 @@ class DeltaOptimizerBase():
                 isUsedInJoin INTEGER,
                 isUsedInFilter INTEGER,
                 isUsedInGroup INTEGER
-                )""")
+                )
+                USING delta TBLPROPERTIES('delta.feature.allowColumnDefaults' = 'supported',
+                         'delta.columnMapping.mode' = 'name', 
+                         'delta.enableDeletionVectors' = true)
+                """)
 
 
         ## Transaction Log Analysis Tables
@@ -214,7 +256,9 @@ class DeltaOptimizerBase():
             NumberOfVersionsPredicateIsUsed INTEGER,
             AvgMergeRuntimeMs INTEGER,
             UpdateTimestamp TIMESTAMP)
-            USING DELTA;
+            USING delta TBLPROPERTIES('delta.feature.allowColumnDefaults' = 'supported',
+                         'delta.columnMapping.mode' = 'name', 
+                         'delta.enableDeletionVectors' = true)
             """)
         
         self.spark.sql(f"""CREATE TABLE IF NOT EXISTS {self.database_name}.all_tables_cardinality_stats
@@ -228,7 +272,10 @@ class DeltaOptimizerBase():
              IsUsedInReads INTEGER,
              IsUsedInWrites INTEGER,
              UpdateTimestamp TIMESTAMP)
-             USING DELTA""")
+             USING delta TBLPROPERTIES('delta.feature.allowColumnDefaults' = 'supported',
+                         'delta.columnMapping.mode' = 'name', 
+                         'delta.enableDeletionVectors' = true)
+            """)
 
 
 
@@ -239,7 +286,10 @@ class DeltaOptimizerBase():
                      partitionColumns ARRAY<STRING>,
                      mappedFileSizeInMb STRING,
                      UpdateTimestamp TIMESTAMP)
-                     USING DELTA""")
+                     USING delta TBLPROPERTIES('delta.feature.allowColumnDefaults' = 'supported',
+                         'delta.columnMapping.mode' = 'name', 
+                         'delta.enableDeletionVectors' = true)
+                      """)
         
         ## Optimization Strategy Tables
         
@@ -268,7 +318,9 @@ class DeltaOptimizerBase():
             ColumnRank INTEGER,
             RankUpdateTimestamp TIMESTAMP
             )
-            USING DELTA
+            USING delta TBLPROPERTIES('delta.feature.allowColumnDefaults' = 'supported',
+                         'delta.columnMapping.mode' = 'name', 
+                         'delta.enableDeletionVectors' = true)
         """)
 
 
@@ -281,7 +333,9 @@ class DeltaOptimizerBase():
                 ColumnOrderingCommandString ARRAY<STRING>,
                 UpdateTimestamp TIMESTAMP
                 )
-                USING DELTA
+                USING delta TBLPROPERTIES('delta.feature.allowColumnDefaults' = 'supported',
+                         'delta.columnMapping.mode' = 'name', 
+                         'delta.enableDeletionVectors' = true)
         """)
         
         return
@@ -443,6 +497,7 @@ class QueryProfiler(DeltaOptimizerBase):
                  database_filter_list = [], 
                  table_filter_mode='all', 
                  table_filter_list=[], 
+                 query_history_partition_cols:[str] = None,
                  scrub_views=True, 
                  shuffle_partitions=None):
         
@@ -687,6 +742,9 @@ class QueryProfiler(DeltaOptimizerBase):
                                '{self.workspace_url}', ('{start_ts_ms}'::double/1000)::timestamp, 
                                ('{end_ts_ms}'::double/1000)::timestamp)
             """)
+
+            #v1.5.5
+            self.spark.sql(f"OPTIMIZE {self.database_name}.query_history_log ZORDER BY StartTimestamp, EndTimestamp")
         except Exception as e:
             raise(e)
     
@@ -779,7 +837,7 @@ class QueryProfiler(DeltaOptimizerBase):
   
 
     ## Run the Query History Pull (main function)
-    def build_query_history_profile(self, dbx_token, mode='auto', lookback_period_days=3):
+    def build_query_history_profile(self, dbx_token: str, mode: str ='auto', lookback_period_days: int =3, included_statuses: [str] =["QUEUED" "RUNNING" "CANCELED" "FAILED" "FINISHED"]):
         
         ## Modes are 'auto' and 'manual' - auto, means it manages its own state, manual means you override the time frame to analyze no matter the history
         lookback_period = int(lookback_period_days)
@@ -794,6 +852,8 @@ class QueryProfiler(DeltaOptimizerBase):
         start_ts_ms, end_ts_ms = self.get_most_recent_history_from_log(mode, lookback_period)
         
         ## Put together request 
+
+        ## v1.5.5 validate custom included statuses with enum
         
         request_string = {
             "filter_by": {
@@ -801,9 +861,7 @@ class QueryProfiler(DeltaOptimizerBase):
               "end_time_ms": end_ts_ms,
               "start_time_ms": start_ts_ms
             },
-            "statuses": [
-                "FINISHED", "CANCELED"
-            ],
+            "statuses": included_statuses,
             "warehouse_ids": warehouse_ids_list
             },
             "include_metrics": "true",
@@ -879,6 +937,7 @@ class QueryProfiler(DeltaOptimizerBase):
         try: 
             ## v.1.3.1 skip insert if no responses from API
             if (all_responses is None or len(all_responses) == 0):
+              print("No Results to insert. Skipping.")
               pass
             
             else:
@@ -886,28 +945,56 @@ class QueryProfiler(DeltaOptimizerBase):
               raw_queries_df = (self.spark.createDataFrame(all_responses))
               raw_queries_df.createOrReplaceTempView("raw")
 
-              self.spark.sql(f"""INSERT INTO {self.database_name}.raw_query_history_statistics (query_id,query_hash, query_start_time_ms, query_end_time_ms, duration, query_text, status, statement_type,rows_produced,metrics)
+              self.spark.sql(f"""INSERT INTO {self.database_name}.raw_query_history_statistics (query_id,
+                          query_hash, -- v.1.4.0 - MUST PARSE DISTINCT Queryies cause DBX query id is not by query
+                          query_start_time_ms,
+                          query_end_time_ms,
+                          duration,
+                          status,
+                          statement_type,
+                          error_message,
+                          executed_as_user_id,
+                          executed_as_user_name,
+                          rows_produced,
+                          metrics,
+                          endpoint_id,
+                          channel_used,
+                          lookup_key,
+                          update_timestamp,
+                          update_date,
+                          query_text)
+
                           SELECT
                           query_id,
                           sha(query_text) AS query_hash, -- v.1.4.0 - MUST PARSE DISTINCT Queryies cause DBX query id is not by query
                           query_start_time_ms,
                           query_end_time_ms,
                           duration,
-                          query_text,
                           status,
                           statement_type,
+                          error_message,
+                          executed_as_user_id,
+                          executed_as_user_name,
                           rows_produced,
-                          metrics
+                          metrics,
+                          endpoint_id,
+                          channel_used::string AS channel_used,
+                          lookup_key::string,
+                          now() AS update_timestamp,
+                          now()::date AS update_date,
+                          query_text
                           FROM raw
-                          WHERE statement_type IN ('SELECT', 'INSERT', 'REPLACE');
+                          -- v1.5.5 removed WHERE statement_type IN ('SELECT', 'INSERT', 'REPLACE'), we want raw table to have everything and then filter for performance later
+                          ;
                           """)
+            
             
             ## If successfull, insert log
             self.insert_query_history_delta_log(start_ts_ms, end_ts_ms)
             
             ## Add optimization to reduce small file problem
-            
-            self.spark.sql(f"""OPTIMIZE {self.database_name}.raw_query_history_statistics""")
+            ## v1.5.5 - added ZORDER columns to this
+            self.spark.sql(f"""OPTIMIZE {self.database_name}.raw_query_history_statistics ZORDER BY (query_start_time_ms, update_timestamp)""")
             
             ## Build Aggregate Summary Statistics with old and new queries
             self.spark.sql(f"""
@@ -923,7 +1010,7 @@ class QueryProfiler(DeltaOptimizerBase):
                     AVG(duration)*COUNT(*) AS DurationTimesRuns
                     FROM {self.database_name}.raw_query_history_statistics
                     WHERE status IN('FINISHED', 'CANCELED')
-                    AND statement_type IN ('SELECT', 'INSERT', 'REPLACE')
+                    AND statement_type IN ('SELECT', 'INSERT', 'REPLACE') -- v1.5.5 - removed this filter in raw logs and kept everything and only filtered here for performance
                     GROUP BY query_hash
                   )
                   SELECT 
