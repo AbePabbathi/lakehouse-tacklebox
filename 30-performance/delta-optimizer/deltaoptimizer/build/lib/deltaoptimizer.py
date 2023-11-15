@@ -36,7 +36,8 @@ class DeltaOptimizerBase():
                  database_filter_list = [], 
                  table_filter_mode='all', 
                  table_filter_list=[], 
-                 shuffle_partitions=None):
+                 shuffle_partitions=None,
+                 query_history_partition_cols:[str] = None):
 
         ## Assumes running on a spark environment
 
@@ -44,6 +45,7 @@ class DeltaOptimizerBase():
         self.database_location = database_location
         self.spark = SparkSession.getActiveSession()
         self.shuffle_partitions = shuffle_partitions if None else self.spark.sparkContext.defaultParallelism*2
+        self.query_history_partition_cols = query_history_partition_cols
         ## set parallelism based on cluster
         
         if shuffle_partitions is None:
@@ -115,21 +117,42 @@ class DeltaOptimizerBase():
                            WorkspaceName STRING,
                            StartTimestamp TIMESTAMP,
                            EndTimestamp TIMESTAMP)
-                           USING DELTA""")
+                           USING delta TBLPROPERTIES('delta.feature.allowColumnDefaults' = 'supported',
+                         'delta.columnMapping.mode' = 'name', 
+                         'delta.enableDeletionVectors' = true)
+                           """)
+
+        ## v1.5.5 this can be a very big table so adding capabilities to customerize partitioning
+        if self.query_history_partition_cols is not None:
+          partition_str = ", ".join([i for i in self.query_history_partition_cols if len(i)> 0])
+        else:
+          partition_str = "update_date"
 
         self.spark.sql(f"""CREATE TABLE IF NOT EXISTS {self.database_name}.raw_query_history_statistics
                         (Id BIGINT GENERATED ALWAYS AS IDENTITY,
-                        query_id STRING,
-                        query_hash STRING,
-                        query_start_time_ms FLOAT,
-                        query_end_time_ms FLOAT,
-                        duration FLOAT,
-                        query_text STRING,
-                        status STRING,
-                        statement_type STRING,
-                        rows_produced FLOAT,
-                        metrics MAP<STRING, FLOAT>)
-                        USING DELTA""")
+                          query_id STRING,
+                          query_hash STRING, -- v.1.4.0 - MUST PARSE DISTINCT Queryies cause DBX query id is not by query
+                          query_start_time_ms FLOAT ,
+                          query_end_time_ms FLOAT,
+                          duration FLOAT ,
+                          status STRING,
+                          statement_type STRING,
+                          error_message STRING,
+                          executed_as_user_id FLOAT,
+                          executed_as_user_name STRING,
+                          rows_produced FLOAT,
+                          metrics MAP<STRING, FLOAT>,
+                          endpoint_id STRING,
+                          channel_used STRING,
+                          lookup_key STRING,
+                          update_timestamp TIMESTAMP,
+                          update_date DATE,
+                          query_text STRING)
+                        USING delta TBLPROPERTIES('delta.feature.allowColumnDefaults' = 'supported',
+                         'delta.columnMapping.mode' = 'name', 
+                         'delta.enableDeletionVectors' = true)
+                        PARTITIONED BY ({partition_str})
+              """)
 
         self.spark.sql(f"""CREATE TABLE IF NOT EXISTS {self.database_name}.parsed_distinct_queries
                         (
@@ -138,7 +161,10 @@ class DeltaOptimizerBase():
                         query_text STRING,
                         profiled_columns ARRAY<STRING>
                         )
-                        USING DELTA""")
+                        USING delta TBLPROPERTIES('delta.feature.allowColumnDefaults' = 'supported',
+                         'delta.columnMapping.mode' = 'name', 
+                         'delta.enableDeletionVectors' = true)
+                        """)
         
         self.spark.sql(f"""CREATE TABLE IF NOT EXISTS {self.database_name}.read_statistics_scaled_results
                 (
@@ -160,7 +186,11 @@ class DeltaOptimizerBase():
                 AvgQueryDurationScaled DOUBLE,
                 TotalColumnOccurrencesForAllQueriesScaled DOUBLE,
                 AvgColumnOccurrencesInQueriesScaled DOUBLE
-                )""")
+                )
+                USING delta TBLPROPERTIES('delta.feature.allowColumnDefaults' = 'supported',
+                         'delta.columnMapping.mode' = 'name', 
+                         'delta.enableDeletionVectors' = true)
+                """)
 
         self.spark.sql(f"""CREATE TABLE IF NOT EXISTS {self.database_name}.read_statistics_column_level_summary
                 (
@@ -177,7 +207,11 @@ class DeltaOptimizerBase():
                 AvgQueryDuration DOUBLE,
                 TotalColumnOccurrencesForAllQueries LONG,
                 AvgColumnOccurrencesInQueryies DOUBLE
-                )""")
+                )
+                USING delta TBLPROPERTIES('delta.feature.allowColumnDefaults' = 'supported',
+                         'delta.columnMapping.mode' = 'name', 
+                         'delta.enableDeletionVectors' = true)
+                """)
 
         self.spark.sql(f"""CREATE TABLE IF NOT EXISTS {self.database_name}.query_summary_statistics (
                 query_id STRING, -- !!THIS IS THE QUERY HASH - SELF BUILT UNIQUE QUERY ID
@@ -185,7 +219,11 @@ class DeltaOptimizerBase():
                 AverageRowsProduced DOUBLE,
                 TotalQueryRuns LONG,
                 DurationTimesRuns DOUBLE
-                )""")
+                )
+                USING delta TBLPROPERTIES('delta.feature.allowColumnDefaults' = 'supported',
+                         'delta.columnMapping.mode' = 'name', 
+                         'delta.enableDeletionVectors' = true)
+                """)
 
         self.spark.sql(f"""CREATE TABLE IF NOT EXISTS {self.database_name}.query_column_statistics
                 (
@@ -202,7 +240,11 @@ class DeltaOptimizerBase():
                 isUsedInJoin INTEGER,
                 isUsedInFilter INTEGER,
                 isUsedInGroup INTEGER
-                )""")
+                )
+                USING delta TBLPROPERTIES('delta.feature.allowColumnDefaults' = 'supported',
+                         'delta.columnMapping.mode' = 'name', 
+                         'delta.enableDeletionVectors' = true)
+                """)
 
 
         ## Transaction Log Analysis Tables
@@ -214,7 +256,9 @@ class DeltaOptimizerBase():
             NumberOfVersionsPredicateIsUsed INTEGER,
             AvgMergeRuntimeMs INTEGER,
             UpdateTimestamp TIMESTAMP)
-            USING DELTA;
+            USING delta TBLPROPERTIES('delta.feature.allowColumnDefaults' = 'supported',
+                         'delta.columnMapping.mode' = 'name', 
+                         'delta.enableDeletionVectors' = true)
             """)
         
         self.spark.sql(f"""CREATE TABLE IF NOT EXISTS {self.database_name}.all_tables_cardinality_stats
@@ -228,7 +272,10 @@ class DeltaOptimizerBase():
              IsUsedInReads INTEGER,
              IsUsedInWrites INTEGER,
              UpdateTimestamp TIMESTAMP)
-             USING DELTA""")
+             USING delta TBLPROPERTIES('delta.feature.allowColumnDefaults' = 'supported',
+                         'delta.columnMapping.mode' = 'name', 
+                         'delta.enableDeletionVectors' = true)
+            """)
 
 
 
@@ -239,7 +286,10 @@ class DeltaOptimizerBase():
                      partitionColumns ARRAY<STRING>,
                      mappedFileSizeInMb STRING,
                      UpdateTimestamp TIMESTAMP)
-                     USING DELTA""")
+                     USING delta TBLPROPERTIES('delta.feature.allowColumnDefaults' = 'supported',
+                         'delta.columnMapping.mode' = 'name', 
+                         'delta.enableDeletionVectors' = true)
+                      """)
         
         ## Optimization Strategy Tables
         
@@ -268,7 +318,9 @@ class DeltaOptimizerBase():
             ColumnRank INTEGER,
             RankUpdateTimestamp TIMESTAMP
             )
-            USING DELTA
+            USING delta TBLPROPERTIES('delta.feature.allowColumnDefaults' = 'supported',
+                         'delta.columnMapping.mode' = 'name', 
+                         'delta.enableDeletionVectors' = true)
         """)
 
 
@@ -281,7 +333,9 @@ class DeltaOptimizerBase():
                 ColumnOrderingCommandString ARRAY<STRING>,
                 UpdateTimestamp TIMESTAMP
                 )
-                USING DELTA
+                USING delta TBLPROPERTIES('delta.feature.allowColumnDefaults' = 'supported',
+                         'delta.columnMapping.mode' = 'name', 
+                         'delta.enableDeletionVectors' = true)
         """)
         
         return
@@ -443,6 +497,7 @@ class QueryProfiler(DeltaOptimizerBase):
                  database_filter_list = [], 
                  table_filter_mode='all', 
                  table_filter_list=[], 
+                 query_history_partition_cols:[str] = None,
                  scrub_views=True, 
                  shuffle_partitions=None):
         
@@ -687,6 +742,9 @@ class QueryProfiler(DeltaOptimizerBase):
                                '{self.workspace_url}', ('{start_ts_ms}'::double/1000)::timestamp, 
                                ('{end_ts_ms}'::double/1000)::timestamp)
             """)
+
+            #v1.5.5
+            self.spark.sql(f"OPTIMIZE {self.database_name}.query_history_log ZORDER BY StartTimestamp, EndTimestamp")
         except Exception as e:
             raise(e)
     
@@ -779,7 +837,7 @@ class QueryProfiler(DeltaOptimizerBase):
   
 
     ## Run the Query History Pull (main function)
-    def build_query_history_profile(self, dbx_token, mode='auto', lookback_period_days=3):
+    def load_query_history(self, dbx_token: str, mode: str ='auto', lookback_period_days: int =3, included_statuses: [str] =["QUEUED" "RUNNING" "CANCELED" "FAILED" "FINISHED"]):
         
         ## Modes are 'auto' and 'manual' - auto, means it manages its own state, manual means you override the time frame to analyze no matter the history
         lookback_period = int(lookback_period_days)
@@ -794,6 +852,8 @@ class QueryProfiler(DeltaOptimizerBase):
         start_ts_ms, end_ts_ms = self.get_most_recent_history_from_log(mode, lookback_period)
         
         ## Put together request 
+
+        ## v1.5.5 validate custom included statuses with enum
         
         request_string = {
             "filter_by": {
@@ -801,9 +861,7 @@ class QueryProfiler(DeltaOptimizerBase):
               "end_time_ms": end_ts_ms,
               "start_time_ms": start_ts_ms
             },
-            "statuses": [
-                "FINISHED", "CANCELED"
-            ],
+            "statuses": included_statuses,
             "warehouse_ids": warehouse_ids_list
             },
             "include_metrics": "true",
@@ -879,6 +937,7 @@ class QueryProfiler(DeltaOptimizerBase):
         try: 
             ## v.1.3.1 skip insert if no responses from API
             if (all_responses is None or len(all_responses) == 0):
+              print("No Results to insert. Skipping.")
               pass
             
             else:
@@ -886,255 +945,312 @@ class QueryProfiler(DeltaOptimizerBase):
               raw_queries_df = (self.spark.createDataFrame(all_responses))
               raw_queries_df.createOrReplaceTempView("raw")
 
-              self.spark.sql(f"""INSERT INTO {self.database_name}.raw_query_history_statistics (query_id,query_hash, query_start_time_ms, query_end_time_ms, duration, query_text, status, statement_type,rows_produced,metrics)
+              self.spark.sql(f"""INSERT INTO {self.database_name}.raw_query_history_statistics (query_id,
+                          query_hash, -- v.1.4.0 - MUST PARSE DISTINCT Queryies cause DBX query id is not by query
+                          query_start_time_ms,
+                          query_end_time_ms,
+                          duration,
+                          status,
+                          statement_type,
+                          error_message,
+                          executed_as_user_id,
+                          executed_as_user_name,
+                          rows_produced,
+                          metrics,
+                          endpoint_id,
+                          channel_used,
+                          lookup_key,
+                          update_timestamp,
+                          update_date,
+                          query_text)
+
                           SELECT
                           query_id,
                           sha(query_text) AS query_hash, -- v.1.4.0 - MUST PARSE DISTINCT Queryies cause DBX query id is not by query
                           query_start_time_ms,
                           query_end_time_ms,
                           duration,
-                          query_text,
                           status,
                           statement_type,
+                          error_message,
+                          executed_as_user_id,
+                          executed_as_user_name,
                           rows_produced,
-                          metrics
+                          metrics,
+                          endpoint_id,
+                          channel_used::string AS channel_used,
+                          lookup_key::string,
+                          now() AS update_timestamp,
+                          now()::date AS update_date,
+                          query_text
                           FROM raw
-                          WHERE statement_type IN ('SELECT', 'INSERT', 'REPLACE');
+                          -- v1.5.5 removed WHERE statement_type IN ('SELECT', 'INSERT', 'REPLACE'), we want raw table to have everything and then filter for performance later
+                          ;
                           """)
+            
             
             ## If successfull, insert log
             self.insert_query_history_delta_log(start_ts_ms, end_ts_ms)
             
             ## Add optimization to reduce small file problem
-            
-            self.spark.sql(f"""OPTIMIZE {self.database_name}.raw_query_history_statistics""")
-            
-            ## Build Aggregate Summary Statistics with old and new queries
-            self.spark.sql(f"""
-                --Calculate Query Statistics to get importance Rank by Query (duration, rows_returned)
-                -- This is an AGGREGATE table that needs to be rebuilt every time from the source -- not incremental
-                CREATE OR REPLACE TABLE {self.database_name}.query_summary_statistics
-                AS (
-                  WITH raw_query_stats AS (
-                    SELECT query_hash AS query_id, -- v.1.4.0 replace id with hash to actually aggregate by distinct query text
-                    AVG(duration) AS AverageQueryDuration,
-                    AVG(rows_produced) AS AverageRowsProduced,
-                    COUNT(*) AS TotalQueryRuns,
-                    AVG(duration)*COUNT(*) AS DurationTimesRuns
-                    FROM {self.database_name}.raw_query_history_statistics
-                    WHERE status IN('FINISHED', 'CANCELED')
-                    AND statement_type IN ('SELECT', 'INSERT', 'REPLACE')
-                    GROUP BY query_hash
-                  )
-                  SELECT 
-                  *
-                  FROM raw_query_stats
-                )
-                """)
-            
-            ## Optional param to clean and replace views with table definitions
-            if self.scrub_views == True:
-              
-              ## Parse SQL Query and Save into parsed distinct queries table
-              ## v.1.4.0 replace query_id with query_hash - this should speed the parsing process a LOT
-              df_pre_clean = self.spark.sql(f"""SELECT DISTINCT query_hash, query_text FROM {self.database_name}.raw_query_history_statistics""")
-
-              ## Add View Definition Replacement Here before Profiling
-
-              views_df = self.get_all_view_texts_df()
-
-              df_pre_clean.createOrReplaceTempView("queries")
-              views_df.createOrReplaceTempView("views")
-
-              ## Clean Query Text and Replace Views with Underlying Definitions to profile accurately
-              
-              ### Register the udf for SQL 
-              self.spark.udf.register("replace_query_with_views", self.replace_query_with_views)
-
-              df = self.spark.sql("""WITH view_int AS (
-                      SELECT q.*,
-                      REGEXP_REPLACE(q.query_text, '`', '') AS scrubbed_query,
-                      collect_list(view_name) AS view_name_list,
-                      collect_list(view_text) AS view_text_list
-                      FROM queries AS q
-                      LEFT JOIN views AS v ON REGEXP_REPLACE(q.query_text, '`', '') ILIKE (CONCAT('%', v.view_name, '%')) --this is expensive but we gotta do it for now
-                      GROUP BY q.query_hash, q.query_text, REGEXP_REPLACE(q.query_text, '`', '')
-                      )
-                      --clean up views and replace with table definition
-                      SELECT
-                      query_hash,
-                      replace_query_with_views(scrubbed_query, view_name_list, view_text_list) AS query_text
-                      FROM view_int""")
-              
-              
-            elif self.scrub_views == False:
-              ## v.1.4.0 replace query_id with self generated query_hash
-              df = self.spark.sql(f"""SELECT DISTINCT query_hash, query_text FROM {self.database_name}.raw_query_history_statistics""")
-              
-            ## Profile full tables
-
-            df_profiled = (df.withColumn("profiled_columns", self.getParsedFilteredColumnsinSQL(F.col("query_text")))
-                    )
-
-            df_profiled.createOrReplaceTempView("new_parsed")
-            
-            
-            self.spark.sql(f"""
-                MERGE INTO {self.database_name}.parsed_distinct_queries AS target
-                USING new_parsed AS source
-                ON source.query_hash = target.query_hash
-                WHEN MATCHED THEN UPDATE SET target.query_text = source.query_text
-                WHEN NOT MATCHED THEN 
-                    INSERT (target.query_hash, target.query_text, target.profiled_columns) 
-                    VALUES (source.query_hash, source.query_text, source.profiled_columns)""")
-            
-            ## Calculate statistics on profiled queries
-
-            ## v1.4.1 Adding table filtering earlier in the process, need to fully qualify table names. Currently optimizer will NOT do a good job at finding the tables when a USE statement is used instead of the real names
-            pre_stats_df = (self.spark.sql(f"""
-                  WITH exploded_parsed_cols AS (SELECT DISTINCT
-                  explode(profiled_columns) AS explodedCols,
-                  query_hash,
-                  query_text
-                  FROM {self.database_name}.parsed_distinct_queries
-                  ),
-
-                  step_2 AS (SELECT DISTINCT
-                  CONCAT(COALESCE(REVERSE(SPLIT(split(explodedCols, ":")[0], '[.]'))[2], 'hive_metastore'), 
-                    '.', COALESCE(REVERSE(SPLIT(split(explodedCols, ":")[0], '[.]'))[1], 'default'), 
-                    '.', REVERSE(SPLIT(split(explodedCols, ":")[0], '[.]'))[0]) AS TableName, -- v1.4.1 !! Since we filter now, we have to handle table names that are not fully qualified
-                  split(explodedCols, ":")[1] AS ColumnName,
-                  root.query_text,
-                  hist.*
-                  FROM exploded_parsed_cols AS root
-                  LEFT JOIN {self.database_name}.query_summary_statistics AS hist ON root.query_hash = hist.query_id --SELECT statements only included (v1.4.0 Query ID is Query Hash here now)
-                  )
-
-                  SELECT *,
-                  size(split(query_text, ColumnName)) - 1 AS NumberOfColumnOccurrences
-                  FROM step_2
-                """)
-                           )
-            
-            
-            ## Add a database/catalog level inclusion/exclusion statement
-            
-            ## Add table filter inclusion/exclusion statements here
-            ## This inclusion logic is pre processing on class initialization, so just abide by the list
-            self.get_all_tables_to_monitor()
-            subset_tables_to_parse = self.get_table_list()
-            
-            pre_stats_df = pre_stats_df.filter(F.col("TableName").isin(subset_tables_to_parse))
-
-
-                
-            pre_stats_df  = (pre_stats_df.withColumn("isUsedInJoin", self.checkIfJoinColumn(F.col("query_text"), F.concat(F.col("TableName"), F.lit("."), F.col("ColumnName"))))
-                .withColumn("isUsedInFilter", self.checkIfFilterColumn(F.col("query_text"), F.concat(F.col("TableName"), F.lit("."), F.col("ColumnName"))))
-                .withColumn("isUsedInGroup", self.checkIfGroupColumn(F.col("query_text"), F.concat(F.col("TableName"), F.lit("."), F.col("ColumnName"))))
-                            )
-                
-
-            pre_stats_df.createOrReplaceTempView("withUseFlags")
-
-            self.spark.sql(f"""
-            CREATE OR REPLACE TABLE {self.database_name}.query_column_statistics
-            AS SELECT * FROM withUseFlags
-            """)
-
-            #### Calculate more statistics
-
-            self.spark.sql(f"""CREATE OR REPLACE TABLE {self.database_name}.read_statistics_column_level_summary
-                    AS
-                    WITH test_q AS (
-                        SELECT * FROM {self.database_name}.query_column_statistics
-                        WHERE length(ColumnName) >= 1 -- filter out queries with no joins or predicates TO DO: Add database filtering here
-
-                    ),
-                    step_2 AS (
-                        SELECT 
-                        TableName,
-                        ColumnName,
-                        MAX(isUsedInJoin) AS isUsedInJoin,
-                        MAX(isUsedInFilter) AS isUsedInFilter,
-                        MAX(isUsedInGroup) AS isUsedInGroup,
-                        SUM(isUsedInJoin) AS NumberOfQueriesUsedInJoin,
-                        SUM(isUsedInFilter) AS NumberOfQueriesUsedInFilter,
-                        SUM(isUsedInGroup) AS NumberOfQueriesUsedInGroup,
-                        COUNT(DISTINCT query_id) AS QueryReferenceCount, -- This is the number if DISTINCT queries the column it used in, NOT runs
-                        SUM(DurationTimesRuns) AS RawTotalRuntime,
-                        AVG(AverageQueryDuration) AS AvgQueryDuration,
-                        SUM(NumberOfColumnOccurrences) AS TotalColumnOccurrencesForAllQueries,
-                        AVG(NumberOfColumnOccurrences) AS AvgColumnOccurrencesInQueryies
-                        FROM test_q
-                        WHERE length(ColumnName) >=1
-                        GROUP BY TableName, ColumnName
-                    )
-                    SELECT
-                    CONCAT(COALESCE(REVERSE(SPLIT(spine.TableName, '[.]'))[2], 'hive_metastore'), 
-                    '.', COALESCE(REVERSE(SPLIT(spine.TableName, '[.]'))[1], 'default'), 
-                    '.', REVERSE(SPLIT(spine.TableName, '[.]'))[0]) AS TableName,
-                    ColumnName,
-                    isUsedInJoin,
-                    isUsedInFilter,
-                    isUsedInGroup,
-                    NumberOfQueriesUsedInJoin,
-                    NumberOfQueriesUsedInFilter,
-                    NumberOfQueriesUsedInGroup,
-                    QueryReferenceCount,
-                    RawTotalRuntime,
-                    AvgQueryDuration,
-                    TotalColumnOccurrencesForAllQueries,
-                    AvgColumnOccurrencesInQueryies
-                    FROM step_2 AS spine
-                    ; """)
-
-
-            #### Standard scale the metrics 
-            df = self.spark.sql(f"""SELECT * FROM {self.database_name}.read_statistics_column_level_summary""")
-
-            columns_to_scale = ["QueryReferenceCount", 
-                                "RawTotalRuntime", 
-                                "AvgQueryDuration", 
-                                "TotalColumnOccurrencesForAllQueries", 
-                                "AvgColumnOccurrencesInQueryies"]
-
-            min_exprs = {x: "min" for x in columns_to_scale}
-            max_exprs = {x: "max" for x in columns_to_scale}
-
-            ## Apply basic min max scaling by table for now
-
-            dfmin = df.groupBy("TableName").agg(min_exprs)
-            dfmax = df.groupBy("TableName").agg(max_exprs)
-
-            df_boundaries = dfmin.join(dfmax, on="TableName", how="inner")
-
-            df_pre_scaled = df.join(df_boundaries, on="TableName", how="inner")
-
-            df_scaled = (df_pre_scaled
-                     .withColumn("QueryReferenceCountScaled", F.coalesce((F.col("QueryReferenceCount") - F.col("min(QueryReferenceCount)"))/(F.col("max(QueryReferenceCount)") - F.col("min(QueryReferenceCount)")), F.lit(0)))
-                     .withColumn("RawTotalRuntimeScaled", F.coalesce((F.col("RawTotalRuntime") - F.col("min(RawTotalRuntime)"))/(F.col("max(RawTotalRuntime)") - F.col("min(RawTotalRuntime)")), F.lit(0)))
-                     .withColumn("AvgQueryDurationScaled", F.coalesce((F.col("AvgQueryDuration") - F.col("min(AvgQueryDuration)"))/(F.col("max(AvgQueryDuration)") - F.col("min(AvgQueryDuration)")), F.lit(0)))
-                     .withColumn("TotalColumnOccurrencesForAllQueriesScaled", F.coalesce((F.col("TotalColumnOccurrencesForAllQueries") - F.col("min(TotalColumnOccurrencesForAllQueries)"))/(F.col("max(TotalColumnOccurrencesForAllQueries)") - F.col("min(TotalColumnOccurrencesForAllQueries)")), F.lit(0)))
-                     .withColumn("AvgColumnOccurrencesInQueriesScaled", F.coalesce((F.col("AvgColumnOccurrencesInQueryies") - F.col("min(AvgColumnOccurrencesInQueryies)"))/(F.col("max(AvgColumnOccurrencesInQueryies)") - F.col("min(AvgColumnOccurrencesInQueryies)")), F.lit(0)))
-                     .selectExpr("TableName", "ColumnName", "isUsedInJoin", "isUsedInFilter","isUsedInGroup","NumberOfQueriesUsedInJoin","NumberOfQueriesUsedInFilter","NumberOfQueriesUsedInGroup","QueryReferenceCount", "RawTotalRuntime", "AvgQueryDuration", "TotalColumnOccurrencesForAllQueries", "AvgColumnOccurrencesInQueryies", "QueryReferenceCountScaled", "RawTotalRuntimeScaled", "AvgQueryDurationScaled", "TotalColumnOccurrencesForAllQueriesScaled", "AvgColumnOccurrencesInQueriesScaled")
-                        )
-
-
-            df_scaled.createOrReplaceTempView("final_scaled_reads")
-
-            self.spark.sql(f"""CREATE OR REPLACE TABLE {self.database_name}.read_statistics_scaled_results 
-            AS
-            SELECT * FROM final_scaled_reads""")
-
-
-            print(f"""Completed Query Profiling! Results can be found here:\n
-            SELECT * FROM {self.database_name}.read_statistics_scaled_results""")
-
+            ## v1.5.5 - added ZORDER columns to this
+            self.spark.sql(f"""OPTIMIZE {self.database_name}.raw_query_history_statistics ZORDER BY (query_start_time_ms, update_timestamp)""")
             return
-            
+
         except Exception as e:
-            print(f"Could not profile query history of ({len(all_responses)}) queries. :( There may not be any queries to profile since last run, either ignore or switch to manual mode with a further lookback window...")
-            raise(e)
+          raise(e)
+  
+
+    ### v.1.5.5 build profile aggregates for performance separately from pulling history
+    ## TO DO: Make Aggregates Incremental
+    def build_query_history_profile(self, dbx_token: str, mode: str ='auto', lookback_period_days: int =3, included_statuses: [str] =["QUEUED" "RUNNING" "CANCELED" "FAILED" "FINISHED"]):
+
+      ## Loads Query History First
+      self.load_query_history(dbx_token=dbx_token, mode=mode, lookback_period_days=lookback_period_days, included_statuses=included_statuses)
+
+      ## Now built the profile / separately
+      try:
+        ## Build Aggregate Summary Statistics with old and new queries
+        self.spark.sql(f"""
+            --Calculate Query Statistics to get importance Rank by Query (duration, rows_returned)
+            -- This is an AGGREGATE table that needs to be rebuilt every time from the source -- not incremental
+            CREATE OR REPLACE TABLE {self.database_name}.query_summary_statistics
+            AS (
+              WITH raw_query_stats AS (
+                SELECT query_hash AS query_id, -- v.1.4.0 replace id with hash to actually aggregate by distinct query text
+                AVG(duration) AS AverageQueryDuration,
+                AVG(rows_produced) AS AverageRowsProduced,
+                COUNT(*) AS TotalQueryRuns,
+                AVG(duration)*COUNT(*) AS DurationTimesRuns
+                FROM {self.database_name}.raw_query_history_statistics 
+                WHERE  -- v1.5.5 Added filter so we dont query a HUGE table
+                query_start_time_ms >= (unix_timestamp((now() - INTERVAL '{lookback_period_days} DAYS')::timestamp) * 1000)
+                AND status IN('FINISHED', 'CANCELED')
+                AND statement_type IN ('SELECT', 'INSERT', 'REPLACE') -- v1.5.5 - removed this filter in raw logs and kept everything and only filtered here for performance
+                GROUP BY query_hash
+              )
+              SELECT 
+              *
+              FROM raw_query_stats
+            )
+            """)
+        
+        ## Optional param to clean and replace views with table definitions
+        if self.scrub_views == True:
+          
+          ## Parse SQL Query and Save into parsed distinct queries table
+          ## v.1.4.0 replace query_id with query_hash - this should speed the parsing process a LOT
+          ## v1.5.5 - Add lookback filter to only get new queries that are recent to profile
+          df_pre_clean = self.spark.sql(f"""SELECT DISTINCT query_hash, query_text 
+                                        FROM {self.database_name}.raw_query_history_statistics
+                                        WHERE
+                                        query_start_time_ms >= (unix_timestamp((now() - INTERVAL '{lookback_period_days} DAYS')::timestamp) * 1000)
+                                        
+                                        """)
+
+          ## Add View Definition Replacement Here before Profiling
+
+          views_df = self.get_all_view_texts_df()
+
+          df_pre_clean.createOrReplaceTempView("queries")
+          views_df.createOrReplaceTempView("views")
+
+          ## Clean Query Text and Replace Views with Underlying Definitions to profile accurately
+          
+          ### Register the udf for SQL 
+          self.spark.udf.register("replace_query_with_views", self.replace_query_with_views)
+
+          df = self.spark.sql("""WITH view_int AS (
+                  SELECT q.*,
+                  REGEXP_REPLACE(q.query_text, '`', '') AS scrubbed_query,
+                  collect_list(view_name) AS view_name_list,
+                  collect_list(view_text) AS view_text_list
+                  FROM queries AS q
+                  LEFT JOIN views AS v ON REGEXP_REPLACE(q.query_text, '`', '') ILIKE (CONCAT('%', v.view_name, '%')) --this is expensive but we gotta do it for now
+                  GROUP BY q.query_hash, q.query_text, REGEXP_REPLACE(q.query_text, '`', '')
+                  )
+                  --clean up views and replace with table definition
+                  SELECT
+                  query_hash,
+                  replace_query_with_views(scrubbed_query, view_name_list, view_text_list) AS query_text
+                  FROM view_int""")
+          
+          
+        elif self.scrub_views == False:
+          ## v.1.4.0 replace query_id with self generated query_hash
+          ## v1.5.5 Add where clause so we dont filter on ALL the queries
+          df = self.spark.sql(f"""SELECT DISTINCT query_hash, query_text FROM {self.database_name}.raw_query_history_statistics
+                              WHERE
+                              query_start_time_ms >= (unix_timestamp((now() - INTERVAL '{lookback_period_days} DAYS')::timestamp) * 1000)
+                              """)
+          
+        ## Profile full tables
+
+        df_profiled = (df.withColumn("profiled_columns", self.getParsedFilteredColumnsinSQL(F.col("query_text")))
+                )
+
+        df_profiled.createOrReplaceTempView("new_parsed")
+        
+        
+        self.spark.sql(f"""
+            MERGE INTO {self.database_name}.parsed_distinct_queries AS target
+            USING new_parsed AS source
+            ON source.query_hash = target.query_hash
+            WHEN MATCHED THEN UPDATE SET target.query_text = source.query_text
+            WHEN NOT MATCHED THEN 
+                INSERT (target.query_hash, target.query_text, target.profiled_columns) 
+                VALUES (source.query_hash, source.query_text, source.profiled_columns)""")
+        
+        ## v1.5.5 Add optimization to this table
+        self.spark.sql(f"""OPTIMIZE {self.database_name}.parsed_distinct_queries ZORDER BY (query_hash)""")
+        ## Calculate statistics on profiled queries
+
+        ## v1.4.1 Adding table filtering earlier in the process, need to fully qualify table names. Currently optimizer will NOT do a good job at finding the tables when a USE statement is used instead of the real names
+        pre_stats_df = (self.spark.sql(f"""
+              WITH exploded_parsed_cols AS (SELECT DISTINCT
+              explode(profiled_columns) AS explodedCols,
+              query_hash,
+              query_text
+              FROM {self.database_name}.parsed_distinct_queries
+              ),
+
+              step_2 AS (SELECT DISTINCT
+              CONCAT(COALESCE(REVERSE(SPLIT(split(explodedCols, ":")[0], '[.]'))[2], 'hive_metastore'), 
+                '.', COALESCE(REVERSE(SPLIT(split(explodedCols, ":")[0], '[.]'))[1], 'default'), 
+                '.', REVERSE(SPLIT(split(explodedCols, ":")[0], '[.]'))[0]) AS TableName, -- v1.4.1 !! Since we filter now, we have to handle table names that are not fully qualified
+              split(explodedCols, ":")[1] AS ColumnName,
+              root.query_text,
+              hist.*
+              FROM exploded_parsed_cols AS root
+              LEFT JOIN {self.database_name}.query_summary_statistics AS hist ON root.query_hash = hist.query_id --SELECT statements only included (v1.4.0 Query ID is Query Hash here now)
+              )
+
+              SELECT *,
+              size(split(query_text, ColumnName)) - 1 AS NumberOfColumnOccurrences
+              FROM step_2
+            """)
+                        )
+        
+        
+        ## Add a database/catalog level inclusion/exclusion statement
+        
+        ## Add table filter inclusion/exclusion statements here
+        ## This inclusion logic is pre processing on class initialization, so just abide by the list
+        self.get_all_tables_to_monitor()
+        subset_tables_to_parse = self.get_table_list()
+        
+        pre_stats_df = pre_stats_df.filter(F.col("TableName").isin(subset_tables_to_parse))
+
+
+            
+        pre_stats_df  = (pre_stats_df.withColumn("isUsedInJoin", self.checkIfJoinColumn(F.col("query_text"), F.concat(F.col("TableName"), F.lit("."), F.col("ColumnName"))))
+            .withColumn("isUsedInFilter", self.checkIfFilterColumn(F.col("query_text"), F.concat(F.col("TableName"), F.lit("."), F.col("ColumnName"))))
+            .withColumn("isUsedInGroup", self.checkIfGroupColumn(F.col("query_text"), F.concat(F.col("TableName"), F.lit("."), F.col("ColumnName"))))
+                        )
+            
+
+        pre_stats_df.createOrReplaceTempView("withUseFlags")
+
+        self.spark.sql(f"""
+        CREATE OR REPLACE TABLE {self.database_name}.query_column_statistics
+        AS SELECT * FROM withUseFlags
+        """)
+
+        #### Calculate more statistics
+
+        self.spark.sql(f"""CREATE OR REPLACE TABLE {self.database_name}.read_statistics_column_level_summary
+                AS
+                WITH test_q AS (
+                    SELECT * FROM {self.database_name}.query_column_statistics
+                    WHERE length(ColumnName) >= 1 -- filter out queries with no joins or predicates TO DO: Add database filtering here
+
+                ),
+                step_2 AS (
+                    SELECT 
+                    TableName,
+                    ColumnName,
+                    MAX(isUsedInJoin) AS isUsedInJoin,
+                    MAX(isUsedInFilter) AS isUsedInFilter,
+                    MAX(isUsedInGroup) AS isUsedInGroup,
+                    SUM(isUsedInJoin) AS NumberOfQueriesUsedInJoin,
+                    SUM(isUsedInFilter) AS NumberOfQueriesUsedInFilter,
+                    SUM(isUsedInGroup) AS NumberOfQueriesUsedInGroup,
+                    COUNT(DISTINCT query_id) AS QueryReferenceCount, -- This is the number if DISTINCT queries the column it used in, NOT runs
+                    SUM(DurationTimesRuns) AS RawTotalRuntime,
+                    AVG(AverageQueryDuration) AS AvgQueryDuration,
+                    SUM(NumberOfColumnOccurrences) AS TotalColumnOccurrencesForAllQueries,
+                    AVG(NumberOfColumnOccurrences) AS AvgColumnOccurrencesInQueryies
+                    FROM test_q
+                    WHERE length(ColumnName) >=1
+                    GROUP BY TableName, ColumnName
+                )
+                SELECT
+                CONCAT(COALESCE(REVERSE(SPLIT(spine.TableName, '[.]'))[2], 'hive_metastore'), 
+                '.', COALESCE(REVERSE(SPLIT(spine.TableName, '[.]'))[1], 'default'), 
+                '.', REVERSE(SPLIT(spine.TableName, '[.]'))[0]) AS TableName,
+                ColumnName,
+                isUsedInJoin,
+                isUsedInFilter,
+                isUsedInGroup,
+                NumberOfQueriesUsedInJoin,
+                NumberOfQueriesUsedInFilter,
+                NumberOfQueriesUsedInGroup,
+                QueryReferenceCount,
+                RawTotalRuntime,
+                AvgQueryDuration,
+                TotalColumnOccurrencesForAllQueries,
+                AvgColumnOccurrencesInQueryies
+                FROM step_2 AS spine
+                ; """)
+
+
+        #### Standard scale the metrics 
+        df = self.spark.sql(f"""SELECT * FROM {self.database_name}.read_statistics_column_level_summary""")
+
+        columns_to_scale = ["QueryReferenceCount", 
+                            "RawTotalRuntime", 
+                            "AvgQueryDuration", 
+                            "TotalColumnOccurrencesForAllQueries", 
+                            "AvgColumnOccurrencesInQueryies"]
+
+        min_exprs = {x: "min" for x in columns_to_scale}
+        max_exprs = {x: "max" for x in columns_to_scale}
+
+        ## Apply basic min max scaling by table for now
+
+        dfmin = df.groupBy("TableName").agg(min_exprs)
+        dfmax = df.groupBy("TableName").agg(max_exprs)
+
+        df_boundaries = dfmin.join(dfmax, on="TableName", how="inner")
+
+        df_pre_scaled = df.join(df_boundaries, on="TableName", how="inner")
+
+        df_scaled = (df_pre_scaled
+                  .withColumn("QueryReferenceCountScaled", F.coalesce((F.col("QueryReferenceCount") - F.col("min(QueryReferenceCount)"))/(F.col("max(QueryReferenceCount)") - F.col("min(QueryReferenceCount)")), F.lit(0)))
+                  .withColumn("RawTotalRuntimeScaled", F.coalesce((F.col("RawTotalRuntime") - F.col("min(RawTotalRuntime)"))/(F.col("max(RawTotalRuntime)") - F.col("min(RawTotalRuntime)")), F.lit(0)))
+                  .withColumn("AvgQueryDurationScaled", F.coalesce((F.col("AvgQueryDuration") - F.col("min(AvgQueryDuration)"))/(F.col("max(AvgQueryDuration)") - F.col("min(AvgQueryDuration)")), F.lit(0)))
+                  .withColumn("TotalColumnOccurrencesForAllQueriesScaled", F.coalesce((F.col("TotalColumnOccurrencesForAllQueries") - F.col("min(TotalColumnOccurrencesForAllQueries)"))/(F.col("max(TotalColumnOccurrencesForAllQueries)") - F.col("min(TotalColumnOccurrencesForAllQueries)")), F.lit(0)))
+                  .withColumn("AvgColumnOccurrencesInQueriesScaled", F.coalesce((F.col("AvgColumnOccurrencesInQueryies") - F.col("min(AvgColumnOccurrencesInQueryies)"))/(F.col("max(AvgColumnOccurrencesInQueryies)") - F.col("min(AvgColumnOccurrencesInQueryies)")), F.lit(0)))
+                  .selectExpr("TableName", "ColumnName", "isUsedInJoin", "isUsedInFilter","isUsedInGroup","NumberOfQueriesUsedInJoin","NumberOfQueriesUsedInFilter","NumberOfQueriesUsedInGroup","QueryReferenceCount", "RawTotalRuntime", "AvgQueryDuration", "TotalColumnOccurrencesForAllQueries", "AvgColumnOccurrencesInQueryies", "QueryReferenceCountScaled", "RawTotalRuntimeScaled", "AvgQueryDurationScaled", "TotalColumnOccurrencesForAllQueriesScaled", "AvgColumnOccurrencesInQueriesScaled")
+                    )
+
+
+        df_scaled.createOrReplaceTempView("final_scaled_reads")
+
+        self.spark.sql(f"""CREATE OR REPLACE TABLE {self.database_name}.read_statistics_scaled_results 
+        AS
+        SELECT * FROM final_scaled_reads""")
+
+
+        print(f"""Completed Query Profiling! Results can be found here:\n
+        SELECT * FROM {self.database_name}.read_statistics_scaled_results""")
+
+        return
+        
+      except Exception as e:
+
+        print(f"Could not profile query history of ({len(all_responses)}) queries. :( There may not be any queries to profile since last run, either ignore or switch to manual mode with a further lookback window...")
+        raise(e)
 
 
 ##################################
