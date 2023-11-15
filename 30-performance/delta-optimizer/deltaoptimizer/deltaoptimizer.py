@@ -128,7 +128,7 @@ class DeltaOptimizerBase():
         else:
           partition_str = "update_date"
 
-        self.spark.sql(f"""CREATE TABLE IF NOT EXISTS main.delta_optimizer.raw_query_history_statistics
+        self.spark.sql(f"""CREATE TABLE IF NOT EXISTS {self.database_name}.raw_query_history_statistics
                         (Id BIGINT GENERATED ALWAYS AS IDENTITY,
                           query_id STRING,
                           query_hash STRING, -- v.1.4.0 - MUST PARSE DISTINCT Queryies cause DBX query id is not by query
