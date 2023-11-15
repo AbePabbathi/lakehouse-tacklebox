@@ -60,7 +60,7 @@ import os
 # COMMAND ----------
 
 # DBTITLE 1,Register and Retrieve DBX Auth Token
-DBX_TOKEN = "dapibe9c00c902e0ae9b35a8c606013f95b5"
+DBX_TOKEN = "<dbx_token>"
 
 # COMMAND ----------
 
