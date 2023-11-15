@@ -1,14 +1,11 @@
 # Databricks notebook source
 # MAGIC %md
 # MAGIC
-# MAGIC # Delta Optimizer - Profiling Stage
+# MAGIC # Delta Optimizer - Query History Profiler
 # MAGIC
 # MAGIC <ul> 
 # MAGIC   
 # MAGIC   <li> Polls Query History API and get List of Queries for a set of SQL Warehouses (this is incremental, so you just define a lookback period for the first time you poll)
-# MAGIC   <li> Analyzes transaction logs for tables in set of databases (all by default) -- file size, partitions, merge predicates
-# MAGIC   <li> Ranks unified strategy
-# MAGIC     
 # MAGIC </ul>
 # MAGIC
 # MAGIC ### Permissions Required:
@@ -122,7 +119,7 @@ else:
 query_profiler = QueryProfiler(workspaceName, 
   warehouseIdsList, 
   database_name=database_output, ## REQUIRED: Need to know where to put the table
-  query_history_partition_cols = ['update_date'],
+  query_history_partition_cols = ['update_date'], ## also could be 'status', or something else
   scrub_views=False)
 
 
@@ -146,14 +143,13 @@ if start_over == "Yes":
 
 # COMMAND ----------
 
-# DBTITLE 1,Incrementally Get New Queries and Log to Delta Table
-query_profiler.build_query_history_profile(dbx_token = DBX_TOKEN, mode='auto', lookback_period_days=lookbackPeriod)
+# DBTITLE 1,Incrementally Load New Queries to Delta Table
+query_profiler.load_query_history(dbx_token = DBX_TOKEN, mode='auto', lookback_period_days=lookbackPeriod)
 
 # COMMAND ----------
 
-# MAGIC %sql
-# MAGIC
-# MAGIC SELECT * FROM main.delta_optimizer.raw_query_history_statistics
+# DBTITLE 1,Optional Create Performance Aggregates Out of that with this command
+query_profiler.build_query_history_profile(dbx_token = DBX_TOKEN, mode='auto', lookback_period_days=lookbackPeriod)
 
 # COMMAND ----------
 
