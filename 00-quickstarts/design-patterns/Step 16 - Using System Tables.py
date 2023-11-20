@@ -25,7 +25,7 @@
 # MAGIC LOWER(COALESCE(custom_tags.env, custom_tags.ENV)) AS Env_Tag,
 # MAGIC
 # MAGIC -- Ideally Create Tag for Job
-# MAGIC -- Create Tag for Subsystem (i.e. ACR_ETL, CURE, COOKER, etc.)
+# MAGIC -- Create Tag for Subsystem / Use Case
 # MAGIC LOWER(COALESCE(custom_tags.service, custom_tags.SERVICE)) AS Subsystem_Name_Tag,
 # MAGIC CASE WHEN Env_Tag IS NULL OR Subsystem_Name_Tag IS NULL THEN 0 ELSE 1 END AS IsProperlyTagged,
 # MAGIC usage_metadata.job_id AS job_id,
@@ -38,16 +38,16 @@
 # MAGIC   SELECT 
 # MAGIC   sku_name, pricing.default::float AS unit_price,
 # MAGIC   ROW_NUMBER() OVER (PARTITION BY sku_name ORDER BY price_start_time DESC) AS Price_Recency_Rank
-# MAGIC   FROM system.billing.list_prices 
+# MAGIC   FROM system.billing.list_prices
 # MAGIC   )
 # MAGIC   SELECT 
 # MAGIC   sku_name,
 # MAGIC   -- Add in discounts or other customer information
 # MAGIC   CASE 
-# MAGIC   WHEN sku_name LIKE ('%ALL_PURPOSE%') THEN (unit_price::float * (1-0)::float)::float -- 20% discount
+# MAGIC   WHEN sku_name LIKE ('%ALL_PURPOSE%') THEN (unit_price::float * (1-0)::float)::float -- 10% discount
 # MAGIC   WHEN sku_name LIKE ('%DLT%') THEN (unit_price::float * (1-0)::float)::float -- 10% discount
-# MAGIC   WHEN sku_name LIKE ('%JOBS%') THEN (unit_price::float * (1-0)::float)::float -- 37% discount
-# MAGIC   WHEN sku_name LIKE ('%SQL%') THEN (unit_price::float * (1-0)::float)::float -- 20% SQL discount
+# MAGIC   WHEN sku_name LIKE ('%JOBS%') THEN (unit_price::float * (1-0)::float)::float -- 10% discount
+# MAGIC   WHEN sku_name LIKE ('%SQL%') THEN (unit_price::float * (1-0)::float)::float -- 10% SQL discount
 # MAGIC   ELSE unit_price::float
 # MAGIC   END AS unit_price
 # MAGIC   FROM px_all WHERE Price_Recency_Rank = 1 --Get most recent prices for each sku
@@ -648,3 +648,4 @@ cat_privs.createOrReplaceTempView("cat_privs")
 # MAGIC -- Volumes / Privs
 # MAGIC -- and more!
 # MAGIC
+# MAGIC SELECT * FROM system.information_schema.table_constraints
