@@ -1,7 +1,7 @@
 {{ 
   config(
     materialized='table',
-    liquid_clustered_by='device_id'
+    liquid_clustered_by='device_id, HourBucket'
   )
 }}
 
