@@ -5,6 +5,7 @@
     incremental_strategy='merge',
     tblproperties={'delta.tuneFileSizesForRewrites': 'true', 'delta.feature.allowColumnDefaults': 'supported', 'delta.columnMapping.mode' : 'name'},
     liquid_clustered_by = 'timestamp, id, device_id',
+    incremental_predicates= ["DBT_INTERNAL_DEST.timestamp > dateadd(day, -7, now())"],
     pre_hook=["{{ create_bronze_sensors_identity_table() }}",
 
               "{{ databricks_copy_into(target_table='bronze_sensors',
