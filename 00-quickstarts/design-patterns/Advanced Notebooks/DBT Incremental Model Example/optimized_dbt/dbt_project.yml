@@ -22,7 +22,7 @@ clean-targets:         # directories to be removed by `dbt clean`
 models:
   optimized_dbt:
     +materialized: table
-    +tblproperties: {'delta.feature.allowColumnDefaults': 'supported', 'delta.columnMapping.mode' : 'name'}
+    +tblproperties: {'delta.feature.allowColumnDefaults': 'supported', 'delta.columnMapping.mode' : 'name', 'delta.enableDeletionVectors': 'true'}
 
 # Optional for logging dbt run info to Delta tables
 # on-run-end: "{{ dbt_artifacts.upload_results(results) }}"
