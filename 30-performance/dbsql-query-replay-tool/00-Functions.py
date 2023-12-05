@@ -3,7 +3,8 @@ import uuid
 import requests, json
 import time
 from datetime import datetime
-import concurrent.futures
+from queue import Queue
+from threading import Thread
 from dbruntime.databricks_repl_context import get_context
 from pyspark.sql.types import StructType, StructField, StringType
 from pyspark.sql.functions import col, min
@@ -26,23 +27,26 @@ class QueryReplayTest:
         target_warehouse_serverless=True,
         target_warehouse_custom_tags=[],
         target_warehouse_channel="CHANNEL_NAME_PREVIEW",
-        **kwargs
+        target_warehouse_auto_stop_mins=3,
+        sender_parallelism=200,
+        checker_parallelism=10,
+        **kwargs,
     ):
         self.token = token
         self.result_catalog = result_catalog
         self.result_schema = result_schema
-        
-        self._test_id = kwargs.get('test_id', None)
 
-        if 'test_id' in kwargs:
-            run = self.show_run.toPandas().to_dict(orient='records')[0]
-            self.test_name = run['test_name']
-            self.source_warehouse_id = run['source_warehouse_id']
-            self.source_start_time = run['source_start_time']
-            self.source_end_time = run['source_end_time']
-    
-            self._target_warehouse_name =  run['test_name'] + "_" + run['test_id']
-            self._target_warehouse_id = run['target_warehouse_id']
+        self._test_id = kwargs.get("test_id", None)
+
+        if "test_id" in kwargs:
+            run = self.show_run.toPandas().to_dict(orient="records")[0]
+            self.test_name = run["test_name"]
+            self.source_warehouse_id = run["source_warehouse_id"]
+            self.source_start_time = run["source_start_time"]
+            self.source_end_time = run["source_end_time"]
+
+            self._target_warehouse_name = run["test_name"] + "_" + run["test_id"]
+            self._target_warehouse_id = run["target_warehouse_id"]
 
             self._run_completed = True
         else:
@@ -53,8 +57,8 @@ class QueryReplayTest:
 
             self._target_warehouse_name = None
             self._target_warehouse_id = None
-            
-            self._run_completed =  False
+
+            self._run_completed = False
 
         self.target_warehouse_size = target_warehouse_size
         self.target_warehouse_max_num_clusters = target_warehouse_max_num_clusters
@@ -62,7 +66,11 @@ class QueryReplayTest:
         self.target_warehouse_serverless = target_warehouse_serverless
         self.target_warehouse_custom_tags = target_warehouse_custom_tags
         self.target_warehouse_channel = target_warehouse_channel
-        
+        self.target_warehouse_auto_stop_mins = target_warehouse_auto_stop_mins
+
+        self.sender_parallelism = sender_parallelism
+        self.checker_parallelism = checker_parallelism
+
         self._query_df = None
 
     @property
@@ -93,7 +101,7 @@ class QueryReplayTest:
             "name": self.target_warehouse_name,
             "cluster_size": self.target_warehouse_size,
             "max_num_clusters": self.target_warehouse_max_num_clusters,
-            "auto_stop_mins": 3,
+            "auto_stop_mins": self.target_warehouse_auto_stop_mins,
             "enable_photon": True,
             "enable_serverless_compute": self.target_warehouse_serverless,
             "warehouse_type": self.target_warehouse_type,
@@ -147,14 +155,18 @@ class QueryReplayTest:
 
     def send_query(self, statement):
         api = f"https://{self.host}/api/2.0/sql/statements/"
-        payload = {"warehouse_id": self.target_warehouse_id, "statement": statement}
+        payload = {
+            "warehouse_id": self.target_warehouse_id,
+            "statement": statement,
+            "wait_timeout": "0s",
+            "disposition": "EXTERNAL_LINKS",
+        }
         headers = {
             "Authorization": f"Bearer {self.token}",
             "Content-Type": "application/json",
         }
 
         try:
-            # print(f"{datetime.now()} - Executing SQL statement: {statement}")
             response = requests.post(api, headers=headers, data=json.dumps(payload))
             response = json.loads(response.text)["statement_id"]
         except requests.exceptions.RequestException as e:
@@ -165,33 +177,89 @@ class QueryReplayTest:
     def wait_and_send_query(self, wait_time, statement):
         if wait_time > 0:
             time.sleep(wait_time)
+        else:
+            print(f"lagging behind by {wait_time} seconds")
         res = self.send_query(statement)
         return res
 
-    def replay_queries(self, queries, parallelism=10):
+    def check_status(self, statement_id):
+        api = f"https://{self.host}/2.0/sql/statements/{statement_id}"
+        headers = {
+            "Authorization": f"Bearer {self.token}",
+            "Content-Type": "application/json",
+        }
+
+        try:
+            response = requests.get(api, headers=headers)
+            response = response.json()["status"]["state"]
+        except requests.exceptions.RequestException as e:
+            print(f"An error occurred: {e}")
+
+        return response
+
+    def replay_queries(self, queries):
+        def query_sender(q1, q2):
+            while True:
+                start_time, offset, qid, q = q1.get()
+                tid = self.wait_and_send_query(
+                    offset - (datetime.now() - start_time).seconds, q
+                )
+                print(f"{datetime.now()} - sending query - {tid}")
+                q2.put((qid, tid))
+                q1.task_done()
+
+        def query_checker(q2, q3):
+            while True:
+                qid, tid = q2.get()
+                status = self.check_status(tid)
+                print(f"{datetime.now()} - fetching result - {tid} - {status}")
+                if status in ["SUCCEEDED", "FAILED", "CANCELED", "CLOSED"]:
+                    q2.put((qid, tid))
+                else:
+                    q3.put((qid, tid))
+                q2.task_done()
+
+        input_q = Queue(maxsize=0)
+        submitted_q = Queue(maxsize=0)
+        completed_q = Queue(maxsize=0)
+
+        for i in range(self.sender_parallelism):
+            worker = Thread(target=query_sender, args=(input_q, submitted_q))
+            worker.daemon = True
+            worker.start()
+
+        for i in range(self.checker_parallelism):
+            worker = Thread(target=query_checker, args=(submitted_q, completed_q))
+            worker.daemon = True
+            worker.start()
 
         queries.sort(key=lambda x: x[0])
         first_query_start_time = queries[0][0]
-        normalized_queries = [(t - first_query_start_time, i, q) for t, i, q in queries]
+        normalized_queries = [
+            (datetime.now(), t - first_query_start_time, i, q) for t, i, q in queries
+        ]
 
-        t0 = datetime.now().timestamp()
+        for q in normalized_queries:
+            input_q.put(q)
 
-        with concurrent.futures.ThreadPoolExecutor(max_workers=parallelism) as executor:
-            future_to_query = {
-                i: executor.submit(
-                    self.wait_and_send_query, t - (datetime.now().timestamp() - t0), q
-                )
-                for t, i, q in normalized_queries
-            }
+        while input_q.qsize() > 0 or submitted_q.qsize() > 0:
+            print(
+                f"In Progress - {input_q.qsize()} queries to be sent - {submitted_q.qsize()} queries to be fetched - {completed_q.qsize()} / {len(queries)} queries completed"
+            )
+            time.sleep(10)
 
-        return future_to_query
+        return list(completed_q.queue)
 
     def init_schema(self, overwrite=False):
         try:
             spark.sql(f"USE CATALOG {self.result_catalog}")
             if overwrite:
-                spark.sql(f"DROP TABLE IF EXISTS {self.result_schema}.query_replay_test_run CASCADE")
-                spark.sql(f"DROP TABLE IF EXISTS {self.result_schema}.query_replay_test_run_details CASCADE")
+                spark.sql(
+                    f"DROP TABLE IF EXISTS {self.result_schema}.query_replay_test_run"
+                )
+                spark.sql(
+                    f"DROP TABLE IF EXISTS {self.result_schema}.query_replay_test_run_details"
+                )
 
             spark.sql(f"CREATE SCHEMA IF NOT EXISTS {self.result_schema}")
             spark.sql(f"USE SCHEMA {self.result_schema}")
@@ -249,11 +317,11 @@ class QueryReplayTest:
                 (
                     self.test_id,
                     self.source_warehouse_id,
-                    f,
+                    r[0],
                     self.target_warehouse_id,
-                    results[f].result(),
+                    r[1],
                 )
-                for f in results
+                for r in results
             ),
             StructType(
                 [
@@ -291,7 +359,7 @@ class QueryReplayTest:
             self.init_schema(overwrite_schema)
             self.log_run(self.query_df)
             queries = self.query_df.collect()
-            results = self.replay_queries(queries, 200)
+            results = self.replay_queries(queries)
             self.log_run_details(results)
             self._run_completed = True
             print(f"run completed - test id: {self.test_id}")
@@ -323,18 +391,27 @@ class QueryReplayTest:
                 col("s.total_duration_ms").alias("source_execution_time"),
                 (
                     col("s.start_time")
-                    - min(col("s.start_time")).over(Window.partitionBy("r.source_warehouse_id"))
+                    - min(col("s.start_time")).over(
+                        Window.partitionBy("r.source_warehouse_id")
+                    )
                 ).alias("source_offset"),
                 col("t.start_time").alias("target_start_time"),
                 col("t.total_duration_ms").alias("target_execution_time"),
                 (
                     col("t.start_time")
-                    - min(col("t.start_time")).over(Window.partitionBy("r.target_warehouse_id"))
+                    - min(col("t.start_time")).over(
+                        Window.partitionBy("r.target_warehouse_id")
+                    )
                 ).alias("target_offset"),
             )
-        ).withColumns({
-        "offset_diff": (col('source_offset') - col('target_offset')).cast("long"),
-        "execution_diff":col('source_execution_time') - col('target_execution_time')
-        })
+        ).withColumns(
+            {
+                "offset_diff": (col("source_offset") - col("target_offset")).cast(
+                    "long"
+                ),
+                "execution_diff": col("source_execution_time")
+                - col("target_execution_time"),
+            }
+        )
 
         return comparison
