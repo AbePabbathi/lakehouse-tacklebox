@@ -177,13 +177,13 @@ class QueryReplayTest:
     def wait_and_send_query(self, wait_time, statement):
         if wait_time > 0:
             time.sleep(wait_time)
-        else:
-            print(f"lagging behind by {wait_time} seconds")
+        elif round(wait_time) < 0:
+            print(f"lagging behind by {abs(wait_time)} second")
         res = self.send_query(statement)
         return res
 
     def check_status(self, statement_id):
-        api = f"https://{self.host}/2.0/sql/statements/{statement_id}"
+        api = f"https://{self.host}/api/2.0/sql/statements/{statement_id}"
         headers = {
             "Authorization": f"Bearer {self.token}",
             "Content-Type": "application/json",
@@ -204,7 +204,7 @@ class QueryReplayTest:
                 tid = self.wait_and_send_query(
                     offset - (datetime.now() - start_time).seconds, q
                 )
-                print(f"{datetime.now()} - sending query - {tid}")
+                # print(f"{datetime.now()} - sending query - {tid}")
                 q2.put((qid, tid))
                 q1.task_done()
 
@@ -212,8 +212,8 @@ class QueryReplayTest:
             while True:
                 qid, tid = q2.get()
                 status = self.check_status(tid)
-                print(f"{datetime.now()} - fetching result - {tid} - {status}")
-                if status in ["SUCCEEDED", "FAILED", "CANCELED", "CLOSED"]:
+                # print(f"{datetime.now()} - fetching result - {tid} - {status}")
+                if status not in ["SUCCEEDED", "FAILED", "CANCELED", "CLOSED"]:
                     q2.put((qid, tid))
                 else:
                     q3.put((qid, tid))
@@ -242,11 +242,11 @@ class QueryReplayTest:
         for q in normalized_queries:
             input_q.put(q)
 
-        while input_q.qsize() > 0 or submitted_q.qsize() > 0:
+        while completed_q.qsize() < len(queries):
             print(
                 f"In Progress - {input_q.qsize()} queries to be sent - {submitted_q.qsize()} queries to be fetched - {completed_q.qsize()} / {len(queries)} queries completed"
             )
-            time.sleep(10)
+            time.sleep(30)
 
         return list(completed_q.queue)
 
