@@ -1,4 +1,12 @@
 # Databricks notebook source
+# MAGIC %pip install retry
+
+# COMMAND ----------
+
+dbutils.library.restartPython()
+
+# COMMAND ----------
+
 import uuid
 import requests, json
 import time
@@ -9,6 +17,7 @@ from dbruntime.databricks_repl_context import get_context
 from pyspark.sql.types import StructType, StructField, StringType
 from pyspark.sql.functions import col, min
 from pyspark.sql.window import Window
+from retry import retry
 
 
 class QueryReplayTest:
@@ -22,6 +31,7 @@ class QueryReplayTest:
         source_start_time,
         source_end_time,
         target_warehouse_size="Small",
+        target_warehouse_min_num_clusters=1,
         target_warehouse_max_num_clusters=1,
         target_warehouse_type="PRO",
         target_warehouse_serverless=True,
@@ -29,7 +39,7 @@ class QueryReplayTest:
         target_warehouse_channel="CHANNEL_NAME_PREVIEW",
         target_warehouse_auto_stop_mins=3,
         sender_parallelism=200,
-        checker_parallelism=10,
+        checker_parallelism=50,
         **kwargs,
     ):
         self.token = token
@@ -62,6 +72,7 @@ class QueryReplayTest:
 
         self.target_warehouse_size = target_warehouse_size
         self.target_warehouse_max_num_clusters = target_warehouse_max_num_clusters
+        self.target_warehouse_min_num_clusters = target_warehouse_min_num_clusters
         self.target_warehouse_type = target_warehouse_type
         self.target_warehouse_serverless = target_warehouse_serverless
         self.target_warehouse_custom_tags = target_warehouse_custom_tags
@@ -100,6 +111,7 @@ class QueryReplayTest:
         payload = {
             "name": self.target_warehouse_name,
             "cluster_size": self.target_warehouse_size,
+            "min_num_clusters": self.target_warehouse_min_num_clusters,
             "max_num_clusters": self.target_warehouse_max_num_clusters,
             "auto_stop_mins": self.target_warehouse_auto_stop_mins,
             "enable_photon": True,
@@ -153,6 +165,7 @@ class QueryReplayTest:
         )
         return df
 
+    @retry(delay=1, jitter=1)
     def send_query(self, statement):
         api = f"https://{self.host}/api/2.0/sql/statements/"
         payload = {
@@ -181,7 +194,8 @@ class QueryReplayTest:
             print(f"lagging behind by {abs(wait_time)} second")
         res = self.send_query(statement)
         return res
-
+    
+    @retry(delay=1, jitter=1)
     def check_status(self, statement_id):
         api = f"https://{self.host}/api/2.0/sql/statements/{statement_id}"
         headers = {
