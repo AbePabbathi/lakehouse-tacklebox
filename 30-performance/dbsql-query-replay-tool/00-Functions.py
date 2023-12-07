@@ -10,7 +10,7 @@ dbutils.library.restartPython()
 import uuid
 import requests, json
 import time
-from datetime import datetime
+from datetime import datetime, timedelta
 from queue import Queue
 from threading import Thread
 from dbruntime.databricks_repl_context import get_context
@@ -18,6 +18,9 @@ from pyspark.sql.types import StructType, StructField, StringType
 from pyspark.sql.functions import col, min
 from pyspark.sql.window import Window
 from retry import retry
+import logging
+
+logging.basicConfig()
 
 
 class QueryReplayTest:
@@ -165,7 +168,7 @@ class QueryReplayTest:
         )
         return df
 
-    @retry(delay=1, jitter=1)
+    @retry(delay=2, jitter=2)
     def send_query(self, statement):
         api = f"https://{self.host}/api/2.0/sql/statements/"
         payload = {
@@ -179,11 +182,11 @@ class QueryReplayTest:
             "Content-Type": "application/json",
         }
 
-        try:
-            response = requests.post(api, headers=headers, data=json.dumps(payload))
-            response = json.loads(response.text)["statement_id"]
-        except requests.exceptions.RequestException as e:
-            print(f"An error occurred: {e}")
+        # try:
+        response = requests.post(api, headers=headers, data=json.dumps(payload))
+        response = json.loads(response.text)["statement_id"]
+        # except requests.exceptions.RequestException as e:
+        #     print(f"An error occurred: {e}")
 
         return response
 
@@ -194,8 +197,8 @@ class QueryReplayTest:
             print(f"lagging behind by {abs(wait_time)} second")
         res = self.send_query(statement)
         return res
-    
-    @retry(delay=1, jitter=1)
+
+    @retry(delay=2, jitter=2)
     def check_status(self, statement_id):
         api = f"https://{self.host}/api/2.0/sql/statements/{statement_id}"
         headers = {
@@ -203,35 +206,38 @@ class QueryReplayTest:
             "Content-Type": "application/json",
         }
 
-        try:
-            response = requests.get(api, headers=headers)
-            response = response.json()["status"]["state"]
-        except requests.exceptions.RequestException as e:
-            print(f"An error occurred: {e}")
+        # try:
+        response = requests.get(api, headers=headers)
+        response = response.json()["status"]["state"]
+        # except requests.exceptions.RequestException as e:
+        #     print(f"An error occurred: {e}")
 
         return response
 
     def replay_queries(self, queries):
         def query_sender(q1, q2):
             while True:
-                start_time, offset, qid, q = q1.get()
+                start_time, offset, qid, q, d = q1.get()
                 tid = self.wait_and_send_query(
                     offset - (datetime.now() - start_time).seconds, q
                 )
-                # print(f"{datetime.now()} - sending query - {tid}")
-                q2.put((qid, tid))
+                print(f"{datetime.now()} - sending query - {tid}")
+                q2.put((qid, tid, d, datetime.now()+timedelta(seconds=d*0.8)))
                 q1.task_done()
 
         def query_checker(q2, q3):
             while True:
-                qid, tid = q2.get()
-                status = self.check_status(tid)
-                # print(f"{datetime.now()} - fetching result - {tid} - {status}")
-                if status not in ["SUCCEEDED", "FAILED", "CANCELED", "CLOSED"]:
-                    q2.put((qid, tid))
+                qid, tid, d, dt = q2.get()
+                if dt > datetime.now():
+                    q2.put((qid, tid, d, dt))
                 else:
-                    q3.put((qid, tid))
-                q2.task_done()
+                    status = self.check_status(tid)
+                    print(f"{datetime.now()} - fetching result - {tid} - {status}")
+                    if status not in ["SUCCEEDED", "FAILED", "CANCELED", "CLOSED"]:
+                        q2.put((qid, tid, d, dt+timedelta(seconds=d/2)))
+                    else:
+                        q3.put((qid, tid))
+                    q2.task_done()
 
         input_q = Queue(maxsize=0)
         submitted_q = Queue(maxsize=0)
@@ -250,7 +256,8 @@ class QueryReplayTest:
         queries.sort(key=lambda x: x[0])
         first_query_start_time = queries[0][0]
         normalized_queries = [
-            (datetime.now(), t - first_query_start_time, i, q) for t, i, q in queries
+            (datetime.now(), t - first_query_start_time, i, q, d)
+            for t, i, q, d in queries
         ]
 
         for q in normalized_queries:
