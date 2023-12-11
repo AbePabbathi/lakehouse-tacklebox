@@ -131,13 +131,38 @@ class ServerlessClient():
     return
 
 
+  def create_empty_spark_df_from_schema(self, response_schema) -> DataFrame:
+
+    # endp_resp['manifest']['schema']['columns']
+    raw_schema = response_schema
+
+    ## Build pyspark dataframe from empty schema
+
+    empty_sql_type_expr = []
+
+    for i in raw_schema:
+      col_name = i["name"]
+      col_type = i["type_text"]
+      col_expr = f"CAST(NULL AS {col_type}) AS {col_name}"
+
+      empty_sql_type_expr.append(col_expr)
+
+    final_empty_sql_expr = "SELECT " + ", ".join(empty_sql_type_expr)
+
+    empty_pyspark_df = self.spark.createDataFrame([], self.spark.sql(final_empty_sql_expr).schema)
+    return empty_pyspark_df
+
+
   def create_df_from_json_array(self, result_data, result_schema) -> DataFrame:
 
     ## Input, result data (JSONARRAY, raw result schema)
     ## Handle no result calculation
     ## IF NOT RESULT, BUILD RETURN DF FROM STATUS MESSAGE
 
-    if (result_data is None or result_schema is None):
+    ## If result data is empty AND schema it empty, something is wrong
+    if (result_data is None and result_schema is None):
+
+        print(f"WARNING: Both dataset and schema are empty, returning data frame of message from API")
 
 
         result_json_array = {"statement_id": self.active_statement_id,
@@ -148,38 +173,15 @@ class ServerlessClient():
         field_names = list(result_json_array.keys())
     
         clean_df = self.spark.createDataFrame([result_json_array]).select("statement_id","status","statement_text","result")
-
         return clean_df
 
+    ## Valid, but empty result set
+    elif (result_data is None and result_schema is not None):
+      return self.create_empty_spark_df_from_schema(result_schema)
+    
     else:
-
-        field_names = [i.get("name") for i in result_schema]
-        temp_df = self.spark.createDataFrame(result_data).toDF(*field_names)
-
-        ## Cast the associated column types
-
-        cast_expr = []
-        ## Build SQL Expression
-        for i,j  in enumerate(temp_df.columns):
-
-            cast_d_type = result_schema[i].get("type_text")
-            #print(f"{j} --> {cast_d_type}")
-
-            ## TO DO:  Deal with STRUCT types
-
-            if cast_d_type.startswith("ARRAY"):
-
-                ep = f"from_json({j},  '{cast_d_type}') AS {j}"
-
-            else:
-                ep = f"CAST({j} AS {cast_d_type}) AS {j}"
-
-            cast_expr.append(ep)
-            
-
-        clean_df = temp_df.selectExpr(*cast_expr)
-
-        return clean_df
+      clean_df = self.spark.createDataFrame(result_data, schema = self.create_empty_spark_df_from_schema(result_schema).schema)
+      return clean_df
 
 
   def prepare_final_df_from_json_array(self, response = None) -> DataFrame:
@@ -225,6 +227,7 @@ class ServerlessClient():
       
     ## If here, likely syntax error or some other error, build error message to show this
     ## This is not a bug, we WANT syntax errors / FAILED statements to error, because spark.sql would also error
+    
     except Exception as e:
         
         if self.statement_status == 'FAILED':
@@ -332,11 +335,28 @@ class ServerlessClient():
       else:
         endp_resp = response
         
+      if self.verbose == True:
+        print(f"Raw Response from external links: {endp_resp}")
       ## spark or pandas return type
       self.spark.conf.set("spark.sql.execution.arrow.pyspark.enabled", "true")
 
       processing_statement_id = endp_resp["statement_id"]
-      chunks = endp_resp["manifest"]["chunks"]
+
+      ## If no data in respone, just return empty typed DF just like spark.sql() would
+      try: 
+        chunks = endp_resp["manifest"]["chunks"]
+
+      except:
+        if endp_resp['manifest']['total_chunk_count'] == 0:
+
+          print(f"Response is empty, building data frame from source schema")
+
+          ## TO DO: Use pandas or pyspark mode for return the empty dataframe 
+
+          empty_df_with_response_schema = self.create_empty_spark_df_from_schema(endp_resp['manifest']['schema']['columns'])
+          return empty_df_with_response_schema
+
+      ## If chunks are there, build the data frame from them
       tables = []
 
       if self.verbose == True:
@@ -394,13 +414,15 @@ class ServerlessClient():
             if self.verbose == True:
               print("chunk {} received".format(idx))
 
+      ### Now we can build the full table to pandas or do something else
       full_table = pyarrow.concat_tables(tables).to_pandas()
 
       if return_type == "pandas":
         return full_table
 
       else: 
-        final_spark_df = self.spark.createDataFrame(full_table)
+        schema = self.create_empty_spark_df_from_schema(endp_resp['manifest']['schema']['columns']).schema
+        final_spark_df = self.spark.createDataFrame(full_table, schema=schema)
         return final_spark_df
 
 
