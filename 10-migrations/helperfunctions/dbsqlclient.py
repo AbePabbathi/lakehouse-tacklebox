@@ -143,7 +143,7 @@ class ServerlessClient():
     for i in raw_schema:
       col_name = i["name"]
       col_type = i["type_text"]
-      col_expr = f"CAST(NULL AS {col_type}) AS {col_name}"
+      col_expr = f"CAST(NULL AS {col_type}) AS `{col_name}`"
 
       empty_sql_type_expr.append(col_expr)
 
