@@ -1,6 +1,6 @@
 Metadata-Version: 2.1
 Name: helperfunctions
-Version: 1.0.1
+Version: 2.0.0
 Summary: Lakehouse Warehousing and Delta Helper Functions
 Author: Cody Austin Davis @Databricks, Inc.
 Author-email: cody.davis@databricks.com
