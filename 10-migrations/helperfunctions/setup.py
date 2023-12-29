@@ -2,7 +2,7 @@ from setuptools import setup
 
 setup(
     name='helperfunctions',
-    version='1.0.0',
+    version='2.0.1',
     description='Lakehouse Warehousing and Delta Helper Functions',
     author='Cody Austin Davis @Databricks, Inc.',
     author_email='cody.davis@databricks.com',
@@ -13,7 +13,8 @@ setup(
               'dbsqlclient', 
               'transactions',
               'deltalogger',
-              'deltahelpers'],
+              'deltahelpers',
+              'deltaoptimizer'],
     install_requires=[
         'sqlparse',
         'sql_metadata',

@@ -1,6 +1,7 @@
 import requests
 from pyspark.sql import DataFrame
 from pyspark.sql import SparkSession
+from pyspark.sql.functions import col
 import pyarrow
 from urllib.parse import urljoin, urlencode
 import json
@@ -131,13 +132,51 @@ class ServerlessClient():
     return
 
 
+  def create_empty_spark_df_from_schema(self, response_schema) -> DataFrame:
+
+    # endp_resp['manifest']['schema']['columns']
+    raw_schema = response_schema
+
+    ## Build pyspark dataframe from empty schema
+
+    empty_sql_type_expr = []
+
+    for i in raw_schema:
+      col_name = i["name"]
+      col_type = i["type_text"]
+      col_expr = f"CAST(NULL AS {col_type}) AS `{col_name}`"
+
+      empty_sql_type_expr.append(col_expr)
+
+    final_empty_sql_expr = "SELECT " + ", ".join(empty_sql_type_expr)
+
+    if self.verbose:
+      print(f"JSON DATA FRAME CONVERSION SCHEMA SQL : {final_empty_sql_expr}")
+      
+    empty_pyspark_df = self.spark.createDataFrame([], self.spark.sql(final_empty_sql_expr).schema)
+    return empty_pyspark_df
+
+
+  def create_generic_result_data_frame(self):
+    statement_id = self.active_statement_id
+    sql_statement = self.active_sql_statement
+    result_data_str = self.statement_return_payload
+    statement_status = self.statement_status
+    final_generic_df = [(statement_id, statement_status, sql_statement, result_data_str)]
+    generic_result_df = self.spark.createDataFrame(final_generic_df, schema=["statement_id", "statement_status", "sql_statement", "result_data"])
+    return generic_result_df
+  
+    
   def create_df_from_json_array(self, result_data, result_schema) -> DataFrame:
 
     ## Input, result data (JSONARRAY, raw result schema)
     ## Handle no result calculation
     ## IF NOT RESULT, BUILD RETURN DF FROM STATUS MESSAGE
 
-    if (result_data is None or result_schema is None):
+    ## If result data is empty AND schema it empty, something is wrong
+    if (result_data is None and result_schema is None):
+
+        print(f"WARNING: Both dataset and schema are empty, returning data frame of message from API")
 
 
         result_json_array = {"statement_id": self.active_statement_id,
@@ -146,40 +185,63 @@ class ServerlessClient():
                                 "result": self.statement_return_payload}
 
         field_names = list(result_json_array.keys())
+
+        if self.verbose:
+          print(f"JSON DATA FRAME ARRAYL : {result_json_array}")
+          
     
         clean_df = self.spark.createDataFrame([result_json_array]).select("statement_id","status","statement_text","result")
-
         return clean_df
+
+        if self.verbose == True:
+          print(f"RESULT DATA : {result_data}")
+          print(f"RESULT SCHEMA : {result_schema}")
+          
+          
+    ## Valid, but empty result set
+    elif (result_data is None and result_schema is not None):
+
+      if self.verbose == True:
+          print(f"RESULT DATA : {result_data}")
+          print(f"RESULT SCHEMA : {result_schema}")
+        
+      return self.create_empty_spark_df_from_schema(result_schema)
+    
+    ### If has result set AND schema -- the expeted behavior
 
     else:
+      if self.verbose == True:
+        print(f"RESULT DATA : {result_data}")
+        print(f"RESULT SCHEMA : {result_schema}")
 
-        field_names = [i.get("name") for i in result_schema]
-        temp_df = self.spark.createDataFrame(result_data).toDF(*field_names)
-
-        ## Cast the associated column types
-
-        cast_expr = []
-        ## Build SQL Expression
-        for i,j  in enumerate(temp_df.columns):
-
-            cast_d_type = result_schema[i].get("type_text")
-            #print(f"{j} --> {cast_d_type}")
-
-            ## TO DO:  Deal with STRUCT types
-
-            if cast_d_type.startswith("ARRAY"):
-
-                ep = f"from_json({j},  '{cast_d_type}') AS {j}"
-
-            else:
-                ep = f"CAST({j} AS {cast_d_type}) AS {j}"
-
-            cast_expr.append(ep)
-            
-
-        clean_df = temp_df.selectExpr(*cast_expr)
-
+      try: 
+        clean_df = self.spark.createDataFrame(result_data, schema = self.create_empty_spark_df_from_schema(result_schema).schema)
         return clean_df
+        
+      except Exception as e:
+        if self.verbose == True:
+          print(f"Unable to build data frame with strict schema, Going to finally try create a DF of string types then converting as a last resort.")
+          
+        try: 
+          ## Get Official result columns and struct objects 
+          final_result_cols = self.create_empty_spark_df_from_schema(result_schema).columns
+          final_result_schema = self.create_empty_spark_df_from_schema(result_schema).schema
+
+          #### Create a str_df, then go through schema and cast it to the imposed data types
+          str_df = self.spark.createDataFrame(result_data, schema = final_result_cols)
+          
+          clean_df = str_df
+          
+          # Cast columns based on the schema
+          for field in final_result_schema:
+              clean_df = clean_df.withColumn(field.name, col(field.name).cast(field.dataType))
+
+          ## finally return clean df
+          return clean_df
+        
+        except Exception as e_sub:
+          msg = f"Unable to parse dataframe no matter what I do :/ try a different process_method using external links. with error: {str(e)}"
+          raise(Exception(msg))
 
 
   def prepare_final_df_from_json_array(self, response = None) -> DataFrame:
@@ -225,18 +287,19 @@ class ServerlessClient():
       
     ## If here, likely syntax error or some other error, build error message to show this
     ## This is not a bug, we WANT syntax errors / FAILED statements to error, because spark.sql would also error
+    
     except Exception as e:
         
-        if self.statement_status == 'FAILED':
-            msg = f"Statement id {self.active_statement_id} FAILED with response: {self.statement_return_payload}"
+        if self.statement_status != "SUCCEEDED":
+            msg = f"Statement id {self.active_statement_id} FAILED with response: {self.statement_return_payload} with error: {str(e)}"
         
         else:
-            msg = f"Statement id {self.active_statement_id} FAILED with response: {self.statement_return_payload}"
+            msg = f"Statement id {self.active_statement_id} SUCCEEDED with response, but failed to parse: {self.statement_return_payload} {str(e)}"
 
         if self.verbose == True:
             print(f"Failed to build and return df.... here is the response: {endp_resp}")
 
-        raise(msg)
+        raise(Exception(msg))
 
 
 
@@ -332,11 +395,28 @@ class ServerlessClient():
       else:
         endp_resp = response
         
+      if self.verbose == True:
+        print(f"Raw Response from external links: {endp_resp}")
       ## spark or pandas return type
       self.spark.conf.set("spark.sql.execution.arrow.pyspark.enabled", "true")
 
       processing_statement_id = endp_resp["statement_id"]
-      chunks = endp_resp["manifest"]["chunks"]
+
+      ## If no data in respone, just return empty typed DF just like spark.sql() would
+      try: 
+        chunks = endp_resp["manifest"]["chunks"]
+
+      except:
+        if endp_resp['manifest']['total_chunk_count'] == 0:
+
+          print(f"Response is empty, building data frame from source schema")
+
+          ## TO DO: Use pandas or pyspark mode for return the empty dataframe 
+
+          empty_df_with_response_schema = self.create_empty_spark_df_from_schema(endp_resp['manifest']['schema']['columns'])
+          return empty_df_with_response_schema
+
+      ## If chunks are there, build the data frame from them
       tables = []
 
       if self.verbose == True:
@@ -394,13 +474,15 @@ class ServerlessClient():
             if self.verbose == True:
               print("chunk {} received".format(idx))
 
+      ### Now we can build the full table to pandas or do something else
       full_table = pyarrow.concat_tables(tables).to_pandas()
 
       if return_type == "pandas":
         return full_table
 
       else: 
-        final_spark_df = self.spark.createDataFrame(full_table)
+        schema = self.create_empty_spark_df_from_schema(endp_resp['manifest']['schema']['columns']).schema
+        final_spark_df = self.spark.createDataFrame(full_table, schema=schema)
         return final_spark_df
 
 
@@ -546,13 +628,19 @@ class ServerlessClient():
   ### These are the user-facing wrappers that abstract away the need to deal with async vs sync and polling
 
   ## This method wraps all the async functions above into a synchronous call to mimic spark.sql()
-  def sql(self, sql_statement: str, process_mode = "default", return_type = "dataframe", use_catalog=None, use_schema=None) -> DataFrame:
+  def sql(self, sql_statement: str, process_mode = "default", return_type = "dataframe", use_catalog=None, use_schema=None, fallback_mode='auto') -> DataFrame:
     
     """
     process_modes
     default - will automatically try single threaded synchrounous response, and if results are too big it will chunk it
     inline - will only use the inline sync command
     parallel - will only use the async with external links command
+
+    fallback_mode -- only utilized in "default" processing method. 
+    'auto' - means that if the inline fails for any reason, it will try the statement AGAIN if it fails to process the results in external link mode
+    'error' - means that if the inline fails for any reason, it will raise and error and stop the program
+    'ignore' - means that if the inline fails for any reason, it will not return a result and simply print a message notifying the user. 
+    
     """
 
     if process_mode == "default":
@@ -564,12 +652,36 @@ class ServerlessClient():
         final_df = self.submit_sql_sync_in_line(sql_statement, return_type = return_type, use_catalog=use_catalog, use_schema=use_schema)
         return final_df
 
-      except:
+      except Exception as e:
         if self.verbose == True:
-          print("Result too large to inline... moving to external links...")
+          print(f"Result too large to inline or other error... moving to external links... with error: {str(e)}")
         
-        final_df = self.submit_sql_async_external_links(sql_statement, return_type = return_type, use_catalog=use_catalog, use_schema=use_schema)
-        return final_df
+        ## If the previous attempt already completed the query, do not submit the query again, just get and parse the results. 
+        statement_status = self.get_statement_status()
+        
+        if statement_status == 'SUCCEEDED':
+          print(f"Statement SUCCEEDED but failed to parse JSON_INLINE, will handle with fallback_mode= {fallback_mode}, with error{str(e)}")
+     
+        if fallback_mode == 'auto':
+          ## If statement did not succeed
+          final_df = self.submit_sql_async_external_links(sql_statement, return_type = return_type, use_catalog=use_catalog, use_schema=use_schema)
+          return final_df
+      
+        elif fallback_mode == 'error':
+
+          msg = f"FAILED to parse result with statement STATUS: {statement_status} with error {str(e)}."
+          raise(Exception(msg))
+
+        elif fallback_mode == 'ignore':
+          
+          print(f"Failed to message but will not raise error and keep going. This is common for INSERT statements where you do not care about a result to be returned and parsed")
+          
+          ## return generic data frame
+          generic_resul_df = self.create_generic_result_data_frame()
+          return generic_resul_df
+
+        else: 
+          assert(fallback_mode in ['auto', 'error', 'ignore'])
       
     elif process_mode == "inline":
       final_df = self.submit_sql_sync_in_line(sql_statement, return_type = return_type, use_catalog=use_catalog, use_schema=use_schema)
