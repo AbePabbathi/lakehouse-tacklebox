@@ -3,6 +3,7 @@ dbsqlclient.py
 dbsqltransactions.py
 deltahelpers.py
 deltalogger.py
+deltaoptimizer.py
 redshiftchecker.py
 setup.py
 stmvorchestrator.py
