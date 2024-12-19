@@ -15,7 +15,7 @@ host_name = None ## optional
 warehouse_id = "<warehouse_id>"
 
 ## Single Query Example
-sql_statement = "SELECT concat_ws('-', M.id, N.id, random()) as ID FROM range(1000) AS M, range(1000) AS N LIMIT 10000000"
+sql_statement = "SELECT 1"
 
 ## Multi Query Example
 multi_statement = "SELECT 1; SELECT 2; SELECT concat_ws('-', M.id, N.id, random()) as ID FROM range(1000) AS M, range(1000) AS N LIMIT 10000000"
@@ -35,7 +35,10 @@ Optional Params:
 
 """
 
-result_df = serverless_client.sql(sql_statement = sql_statement) ## OPTIONAL: use_catalog="hive_metastore", use_schema="default"
+result_df = serverless_client.sql(sql_statement=sql_statement) ## OPTIONAL: use_catalog="hive_metastore", use_schema="default"
+
+
+display(result_df)
 
 # COMMAND ----------
 

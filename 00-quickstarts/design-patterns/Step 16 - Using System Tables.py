@@ -14,7 +14,6 @@
 # DBTITLE 1,Billing Aggregate BI View with Pricing - Most Recent Contract
 # MAGIC %sql
 # MAGIC
-# MAGIC
 # MAGIC WITH hours_price_by_sku
 # MAGIC AS (
 # MAGIC SELECT u.*, 
